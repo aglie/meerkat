@@ -361,6 +361,7 @@ def reconstruct_data(filename_template,
     if measured_pixels is None:
         measured_pixels = get_image(image_name(1)) >= 0
 
+    #TODO: maybe add scale 'median' where scale is defined as a median of a frame divided by a median of a first frame?
     if scale is None:
         scale = np.ones(last_image-first_image+1)
     else:
@@ -471,7 +472,7 @@ def reconstruct_data(filename_template,
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
     for frame_number in np.arange(first_image, last_image, image_increment):
-        print frame_number
+        print "reconstructing frame number ", frame_number
 
         image = get_image(image_name(frame_number))
         image = image[measured_pixels]

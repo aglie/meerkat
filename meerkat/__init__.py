@@ -2,4 +2,4 @@
 Description goes here
 """
 
-from . import meerkat
+from .meerkat import *

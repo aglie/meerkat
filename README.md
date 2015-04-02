@@ -48,7 +48,7 @@ The downside of the crystallographic coordinates is that they are in general not
 
      reconstruct_in_orthonormal_basis=True
 
-If the reconstruction is performed in orthonormal basis, the new basis $a_o^*,b_o^*,c_o^*$ is calculated from the crystal $a^*,b^*,c^*$ vectors. In the new basis $a_o^*=a_o^*/|a_o^*|$, the $b_o^*$ is in the plane spawned by $a^*$ and $b^*$, and $c_o^*$ is orthogonal to  $a_o^*$ and $b_o^*$.
+If the reconstruction is performed in orthonormal basis, the new basis a*',b*',c*' is calculated from the crystal a*,b*,c* vectors. In the new basis a'* is parallel to a*, the b'* is in the plane spawned by a* and b*, and c'* is orthogonal to a'* and b'*.
 
 ## Memory usage
 The three dimensional arrays containing the reconstructed reciprocal space are typically large (~10Gb). We appreciate that not all computers might have enough operating memory to hold this datasets. Thanks to the `hdf5`, it is possible to use large arrays hosted on hard drive. In such case, only a small portion of the array will be cached in the operating memory. In order to turn on caching set parameter `all_in_memory` to `False` and define the size of the memory for cache.
