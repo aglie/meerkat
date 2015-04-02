@@ -36,13 +36,13 @@ reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf,
 ```
 
 ## Output
-The result is saved as an (hdf5)[“http://www.hdfgroup.org/HDF5/”] file. The reconstruction is held in two datasets: `rebinned_data` and `number_of_pixels_rebinned`, the former is a corrected sum of intensities of reconstructed pixels, while the latter counts how many pixels were reconstructed. The scattering intensity can be obtained by dividing the two: `rebinned_data[i,j,k]/number_of_pixels_rebinned[i,j,k]`.
+The result is saved as an [hdf5](“http://www.hdfgroup.org/HDF5/”) file. The reconstruction is held in two datasets: `rebinned_data` and `number_of_pixels_rebinned`, the former is a corrected sum of intensities of reconstructed pixels, while the latter counts how many pixels were reconstructed. The scattering intensity can be obtained by dividing the two: `rebinned_data[i,j,k]/number_of_pixels_rebinned[i,j,k]`.
 
 In addition to the two datasets, the reconstruction file contains parameters of the reconstruction `maxind`,  `number_of_pixels`, calculated `step_size`, and information from XDS files: `unit_cell`, `space_group_nr` and `metric_tensor`.
 
 ## Reconstruction coordinates
 
-By default the reconstruction is performed in crystallographic coordinates. Such reconstructions can be easily symmetry-averaged. Also the numerical analysis of diffuse scattering is more straightforwardly performed in crystallographic coordinates (for example the program (Yell)[“https://github.com/YellProgram/Yell/”] uses such coordinates).
+By default the reconstruction is performed in crystallographic coordinates. Such reconstructions can be easily symmetry-averaged. Also the numerical analysis of diffuse scattering is more straightforwardly performed in crystallographic coordinates (for example the program [Yell](“https://github.com/YellProgram/Yell/”) uses such coordinates).
 
 The downside of the crystallographic coordinates is that they are in general not orthorombic, which makes the reconstructions in such coordinates slightly more complicated to plot. If the reconstructions are required in orthonormal coordinates, this can be achieved by setting: 
 
