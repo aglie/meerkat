@@ -1,7 +1,5 @@
 import numpy as np
-import scipy as sp
 import fabio
-# import h5py
 import re
 import os
 from det2lab_xds import det2lab_xds, rotvec2mat
@@ -188,10 +186,10 @@ def air_absorption_coefficient(medium, wavelength):
     photon_energy = etw / wavelength
 
     if photon_energy < min(mass_attenuation_coefficient[:, 0]):
-        raise Exception('Wavelength is too large, use nearest value')
+        raise Exception('Wavelength is too large, using nearest value')
 
     if photon_energy > max(mass_attenuation_coefficient[:, 0]):
-        raise Exception('Wavelength is too small, use nearest value')
+        raise Exception('Wavelength is too small, using nearest value')
 
     # 0.1 here converts from cm^-1 to mm^-1
     mu = 0.1 * density * np.interp(photon_energy,
@@ -203,7 +201,7 @@ def air_absorption_coefficient(medium, wavelength):
 
 def create_h5py_with_large_cache(filename, cache_size_mb):
     """
-Allows to open the hdf5 file with specified
+Allows to open the hdf5 file with specified cache size
     """
     # h5py does not allow to control the cache size from the high level
     # we employ the workaround
@@ -318,7 +316,7 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
     #
     #corrections = corrections(measured_pixels)';
     #
-    # TODO: implement detector efficiency
+    # TODO: implement detector efficiency for Pilatus
     return corrections
 
 
@@ -348,68 +346,35 @@ def reconstruct_data(filename_template,
                      output_filename='reconstruction.h5',
                      size_of_cache=100,
                      all_in_memory=False,
-                     override=False):
-    #image_name=@(num)sprintf(filename_template,num);
+                     override=False,
+                     scale=None):
+
     def image_name(num):
         return filename_template % num  #test above
 
-    #if length(last_image)==2
-    #    first_image = last_image(1);
-    #    last_image = last_image(2);
-    #else
-    #    first_image = 1;
-    #end
-
-
-    #[~,~,~,file_extension]=regexp(filename_template,'[^.]*$');
-    #if strcmp(file_extension,'mar2000')
-    #    get_image=@read_mar;
-    #elseif strcmp(file_extension,'mar2300')
-    #    get_image=@read_mar;
-    #elseif strcmp(file_extension,'img')
-    #    get_image=@read_diffraction_image;
-    #elseif strcmp(file_extension,'cbf')
-    #    get_image=@read_cbf;
-    #elseif strcmp(file_extension,'mccd')
-    #    get_image=@(fn)double(importdata(fn)')-100;
-    #elseif strcmp(file_extension,'cbffail') %a special format for a one-time experiment with zeolite beta
-    #    get_image=@(fn)np.mod(read_cbf(fn),2^16);
-    #else
-    #    error('unknown diffraction file format %s',file_extension);
-    #end
 
     def get_image(fname):
         return fabio.open(fname).data
 
     #TODO: check mar2000 and 2300 is done properly with respect to oversaturated reflections. Check what happens in other cases too
 
-    #if nargin<6 || isempty(measured_pixels)
-    #    measured_pixels = get_image(image_name(1))>=0;
-    #end
-
     if measured_pixels is None:
         measured_pixels = get_image(image_name(1)) >= 0
 
-    #if nargin<7 || isempty(microsteps)
-    #    microsteps=1;
-    #end
+    if scale is None:
+        scale = np.ones(last_image-first_image+1)
+    else:
+        assert(len(scale)==last_image-first_image+1)
 
     if microsteps is None:
         microsteps = (1, 1, 1)
 
     assert 3 == len(microsteps), 'Microsteps should have three values: along x, y and phi.'
 
-    #if numel(microsteps)==3
-    #    incr_xy=microsteps([1 2]);
-    #    assert(all(np.mod(incr_xy,1)==0),'microsteps in x and y direction should be integer')
-    #    get_image=@(filename)kron(get_image(filename),np.ones(incr_xy));
-    #    measured_pixels = 1==kron(measured_pixels,np.ones(incr_xy));
-    #    microsteps=microsteps(3);
-    #end
-
     incr_xy = np.array(microsteps)[0:2]
     assert np.all(np.mod(incr_xy, 1) == 0), 'microsteps in x and y direction should be integer'
 
+    #TODO: microstepping is omitted in this version
     assert np.all(
         incr_xy == np.array([1, 1])), 'microsteps are not implemented atm'  #see next section and also down there
     if not np.all(incr_xy == np.array([1, 1])):
@@ -417,14 +382,6 @@ def reconstruct_data(filename_template,
             np.kron(fabio.open(fname).data,
                  np.ones(incr_xy))  # TODO: remove the copypaste from the previous definition of get_image
         measured_pixels = 1 == np.kron(measured_pixels, np.ones(incr_xy))
-
-    #TODO: maybe microstepping can wait until the cython version, it can be omitted in vanilla version
-
-    #image_increment=1;
-    #if microsteps<1
-    #    image_increment=1/microsteps;
-    #    microsteps=1;
-    #end
 
     microsteps = microsteps[2]
     if microsteps < 1:
@@ -434,46 +391,23 @@ def reconstruct_data(filename_template,
     else:
         image_increment = 1
 
-    #if nargin<8 || isempty(unit_cell_transform_matrix)
-    #    unit_cell_transform_matrix=np.eye(3);
-    #end
     assert (3, 3) == np.shape(unit_cell_transform_matrix)
 
-    #% prepare hkl indices
-    #[x,y]=ndgrid(1:np.size(measured_pixels,1),1:np.size(measured_pixels,2));
-    #h=[x(measured_pixels(:)) y(measured_pixels(:))];
+    # prepare hkl indices
     h = np.mgrid[1:np.size(measured_pixels, 1) + 1, 1:np.size(measured_pixels, 0) + 1].T
     h = h.reshape((np.size(h) / 2, 2))
     h = h[np.reshape(measured_pixels, (-1)), :]
 
-    #if length(number_of_pixels)==1
-    #    number_of_pixels=[number_of_pixels,number_of_pixels,number_of_pixels];
-    #end
     number_of_pixels = np.array(number_of_pixels)
     assert len(number_of_pixels) == 3
 
-    #if length(maxind)==1
-    #    maxind=[maxind,maxind,maxind];
-    #end
     maxind = np.array(maxind, dtype=np.float_)
     assert len(maxind) == 3
 
-    #maxind_matrix=repmat(maxind',1,np.sum(measured_pixels(:)));
-    #maxind_matrix = np.tile(maxind, (np.sum(measured_pixels), 1)).T
-
-    #max_pixel_number_matrix=repmat(number_of_pixels',1,np.sum(measured_pixels(:)));
-    #max_pixel_number_matrix = np.tile(number_of_pixels, (np.sum(measured_pixels), 1)).T
-
-    #step_size = (number_of_pixels-1)./maxind/2;
     step_size_inv = 1.0 * (number_of_pixels - 1) / maxind / 2
     step_size = 1.0/step_size_inv
 
-    #to_index=@(c)round(np.diag(step_size)*(c+maxind_matrix))+1;
-
     to_index = lambda c: np.around(step_size_inv[:,np.newaxis]*(c+maxind[:,np.newaxis])).astype(np.int64)
-
-    #rebinned_data=np.zeros(number_of_pixels);
-    #number_of_pixels_rebinned=rebinned_data;
 
     if output_filename is not None:
         if os.path.exists(output_filename):
@@ -506,6 +440,7 @@ def reconstruct_data(filename_template,
     wavelength = instrument_parameters['wavelength']
     oscillation_angle = instrument_parameters['oscillation_angle']
 
+    #TODO: implement microstepping
     #%in case of microstepping
     #if exist('incr_xy','var')
     #    NX=NX*incr_xy(1);
@@ -516,77 +451,36 @@ def reconstruct_data(filename_template,
     #    y_center=y_center*incr_xy(2);
     #end
 
-    #TODO: implement microstepping
-
-    #% rebin data
-    #unit_cell_vectors=unit_cell_transform_matrix*unit_cell_vectors;
-
     unit_cell_vectors = np.dot(unit_cell_transform_matrix, unit_cell_vectors)
 
-    #if reconstruct_in_orthonormal_basis
-    #    [Q,~]=np.qr(unit_cell_vectors');
-    #    unit_cell_vectors=Q';
-    #end
     if reconstruct_in_orthonormal_basis:
         [Q, _] = np.linalg.qr(unit_cell_vectors.T)
         unit_cell_vectors = Q.T
 
-    #metric_tensor=unit_cell_vectors*unit_cell_vectors';
-    #[~,normalized_metric_tensor]=cov2corr(metric_tensor);
-    #transfrom_matrix=chol(inv(normalized_metric_tensor))';
+
     metric_tensor = np.dot(unit_cell_vectors, unit_cell_vectors.T)
     [_, normalized_metric_tensor] = cov2corr(metric_tensor)
     transfrom_matrix = np.linalg.cholesky(np.linalg.inv(normalized_metric_tensor))
-
-    #Tp = maketform('affine',blkdiag(transfrom_matrix(1:2,1:2),1));
-    #Tp=??? Will keep it like this untill it is nesessary for drawing
 
     corrections = correction_coefficients(h, instrument_parameters, medium, polarization_factor,
                                           polarization_plane_normal, wavelength, wavevector)
 
 
-    #micro_oscillation_angle=oscillation_angle/microsteps;
     micro_oscillation_angle = oscillation_angle / microsteps
-
-    #
-    #h_starting=det2lab_xds(h,1,...
-    #                starting_frame,0,0,...
-    #                rotation_axis,...
-    #                wavelength,wavevector,...
-    #                NX,NY,pixelsize_x,pixelsize_y,...
-    #                distance_to_detector,x_center,y_center,...
-    #                detector_x,...
-    #                detector_y,...
-    #                detector_normal); %%precalculate static h then we going to rotate it
 
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
-    #for frame_number=first_image:image_increment:last_image;
     for frame_number in np.arange(first_image, last_image, image_increment):
-
-        #    tic
-        #    fprintf('%i\n',frame_number)
         print frame_number
-
-        #    image=get_image(image_name(frame_number));
-        #    image=image(measured_pixels);
-        #    image=image./corrections;
 
         image = get_image(image_name(frame_number))
         image = image[measured_pixels]
-        image = image / corrections
+        image = image / corrections * scale[frame_number-first_image]
 
-        #    for m=0:microsteps-1
         for m in np.arange(0, microsteps):
-            #        phi=(frame_number*microsteps+m-starting_frame+0.5)*micro_oscillation_angle+starting_angle;
-            #        h_frame=vrrotvec2mat([rotation_axis' -deg2rad(phi)])*h_starting;
             phi = (frame_number * microsteps + m - starting_frame + 0.5) * micro_oscillation_angle + starting_angle
             h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi)), h_starting)
 
-            #        fractional = unit_cell_vectors*h_frame; 
-            #        indices = to_index(fractional);        
-            #        indices = max(indices,1);
-            #        indices = min(indices,max_pixel_number_matrix);
             fractional = np.dot(unit_cell_vectors, h_frame)
             del h_frame
             indices = to_index(fractional)
@@ -622,4 +516,4 @@ def reconstruct_data(filename_template,
 #todo: add lower limits, they are needed here
 #todo: add string for file version
 #todo: define stepsize rather than number of pixels
-
+#todo: think of making the output nexus compatible
