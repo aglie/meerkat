@@ -14,10 +14,6 @@ The reconstruction can be run using the following python script:
 
 ```
 from meerkat import reconstruct_data
-import fabio
-
-#load the pixels which should be used in reconstruction
-measured_pixels=fabio.open('BKGINIT.cbf').data>=0
 
 #reconstruct dataset
 reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf,
@@ -28,7 +24,6 @@ reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf,
         number_of_pixels=[801, 801, 801], #The resulting size of the array. Controls the step size
         polarization_factor=0.5,
         path_to_XPARM='/home/arkadiy/work/data/PdCPTN01002/xds',
-        measured_pixels=measured_pixels,
         output_filename='reconstruction.h5',
         all_in_memory=False,
         size_of_cache=100,
