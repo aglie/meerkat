@@ -471,8 +471,8 @@ def reconstruct_data(filename_template,
 
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
-    for frame_number in np.arange(first_image, last_image, image_increment):
-        print "reconstructing frame number ", frame_number
+    for frame_number in np.arange(first_image, last_image+image_increment, image_increment):
+        print("reconstructing frame number %i" % frame_number)
 
         image = get_image(image_name(frame_number))
         image = image[measured_pixels]
