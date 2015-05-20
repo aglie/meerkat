@@ -5,6 +5,19 @@ A python library for performing reciprocal space reconstruction from single crys
 The package can be installed using pip:
 
     pip install meerkat
+    
+On Windows we recommend to use virtual environments like [anaconda](https://store.continuum.io/cshop/anaconda/) which simplify python installation. 
+
+#### Troubleshoot for anaconda users
+
+Some anaconda distributions fail on `pip install meerkat` while trying to compile `h5py`. In this case the following commands work:
+
+```
+pip install meerkat --no-deps
+pip install fabio
+```
+
+Since anaconda comes with preinstalled `h5py` it is not required to reinstall it with pip, and the following command resolves all dependencies.
 
 ## Usage
 
