@@ -8,7 +8,7 @@ The package can be installed using pip:
     
 On Windows we recommend to use virtual environments like [anaconda](https://store.continuum.io/cshop/anaconda/) which simplify python installation. 
 
-#### Troubleshoot for anaconda users
+#### Note for anaconda users
 
 Some anaconda distributions fail on `pip install meerkat` while trying to compile `h5py`. In this case the following commands work:
 
