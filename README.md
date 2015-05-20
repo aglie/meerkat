@@ -29,7 +29,7 @@ The reconstruction can be run using the following python script:
 from meerkat import reconstruct_data
 
 #reconstruct dataset
-reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf,
+reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf',
         first_image=1,
         last_image=3600,
         reconstruct_in_orthonormal_basis=False,
