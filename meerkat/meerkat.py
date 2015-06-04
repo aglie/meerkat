@@ -469,18 +469,20 @@ def reconstruct_data(filename_template,
 
     micro_oscillation_angle = oscillation_angle / microsteps
 
+    #Calculate h for frame number 0
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
-    for frame_number in np.arange(first_image, last_image+image_increment, image_increment):
-        print("reconstructing frame number %i" % frame_number)
+    for frame_number in np.arange(first_image, last_image, image_increment):
+        print "reconstructing frame number ", frame_number
 
         image = get_image(image_name(frame_number))
         image = image[measured_pixels]
         image = image / corrections * scale[frame_number-first_image]
 
         for m in np.arange(0, microsteps):
-            phi = (frame_number * microsteps + m - starting_frame + 0.5) * micro_oscillation_angle + starting_angle
-            h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi)), h_starting)
+	    #Phi is with respect to phi at frame number 0
+            phi_minus_phi0=( (frame_number - 0.5) * microsteps + m + 0.5) * micro_oscillation_angle
+	        h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
 
             fractional = np.dot(unit_cell_vectors, h_frame)
             del h_frame
