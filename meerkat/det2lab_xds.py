@@ -54,7 +54,7 @@ def det2lab_xds(
                            distance_to_detector * np.outer(np.ones(shape=xmm.shape),
                                                            detector_normal)
     scattering_vector_mm = scattering_vector_mm.T
-    phi = (frame_number - starting_frame + 0.5) * oscillation_angle + \
+    phi = (frame_number - starting_frame) * oscillation_angle + \
           starting_angle
     # calculating norm for each column
     norms = np.sum(scattering_vector_mm ** 2., axis=0) ** (1. / 2)
