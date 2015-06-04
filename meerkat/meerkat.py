@@ -482,7 +482,7 @@ def reconstruct_data(filename_template,
         for m in np.arange(0, microsteps):
 	    #Phi is with respect to phi at frame number 0
             phi_minus_phi0=( (frame_number - 0.5) * microsteps + m + 0.5) * micro_oscillation_angle
-	        h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
+	    h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
 
             fractional = np.dot(unit_cell_vectors, h_frame)
             del h_frame
