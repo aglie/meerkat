@@ -1,0 +1,13 @@
+Todo:
+
+Make a tiny interfacte which could:
+
+pickup XPARM folder
+load the frame filename
+load the untrusted regions from XDS
+load the hkl, find the upper limits
+show frames
+show untrusted region
+allow to draw untrusted region by hand
+
+- if input files could not be read with fabio, run 2cbf behind the scene to tonvert them to cbf
