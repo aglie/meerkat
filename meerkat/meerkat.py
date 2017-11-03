@@ -4,6 +4,7 @@ import re
 import os
 from .det2lab_xds import det2lab_xds, rotvec2mat
 import h5py
+from numpy.linalg import norm
 
 
 def r_get_numbers(matchgroup, num):
@@ -261,35 +262,15 @@ def accumulate_intensity(intensity,
 
 
 def correction_coefficients(h, instrument_parameters, medium, polarization_factor, polarization_plane_normal,
-                            wavelength, wavevector):
-    # % prepare corrections
-    #[~,scattering_vector_mm,unit_scattering_vector]=det2lab_xds([x(:) y(:)],0,...
-    #            starting_frame,starting_angle,oscillation_angle,...
-    #            rotation_axis,...
-    #            wavelength,wavevector,...
-    #            NX,NY,pixelsize_x,pixelsize_y,...
-    #            distance_to_detector,x_center,y_center,...
-    #            detector_x,...
-    #            detector_y,...
-    #            detector_normal);
+                            wavelength, wavevector, detector_normal):
+
     [_, scattering_vector_mm, unit_scattering_vector] = det2lab_xds(h, 0, **instrument_parameters)
-    #% air absorption correction
-    #medium = 'Air';%provided externally can be Air of Helium
-    #mu = air_absorption_coefficient(medium,wavelength);
-    #air_absorption = exp(-mu*np.sqrt(sum(scattering_vector_mm.^2)));
-    # air absorption correction
+
     mu = air_absorption_coefficient(medium, wavelength)
     air_absorption = np.exp(
-        -mu * np.sqrt(np.sum(scattering_vector_mm ** 2, axis=0)))  #check along which dimension. should be of size
+        -mu * np.sqrt(np.sum(scattering_vector_mm ** 2, axis=0)))  
+    
     #% Polarisation
-    #polarization_factor = 1;%0.9887/(1+0.9887); %provided externally
-    #polarization_plane_normal = [0 1 0]; %provided externally
-    #
-    #polarization_plane_normal = polarization_plane_normal/norm(polarization_plane_normal); % just in case
-    #polarization_plane_other_comp = np.cross(polarization_plane_normal,wavevector');
-    #polarization_plane_other_comp = polarization_plane_other_comp/norm(polarization_plane_other_comp);
-    #polarization_correction = (1-polarization_factor)*(1-(polarization_plane_normal*unit_scattering_vector).^2)+...
-    #                       polarization_factor*(1-(polarization_plane_other_comp*unit_scattering_vector).^2);
     polarization_plane_normal = np.array(polarization_plane_normal)
     polarization_plane_normal = polarization_plane_normal / np.linalg.norm(polarization_plane_normal)  # just in case
     polarization_plane_other_comp = np.cross(polarization_plane_normal, wavevector.T)
@@ -299,15 +280,12 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
                               polarization_factor * (
                                   1 - np.dot(polarization_plane_other_comp, unit_scattering_vector) ** 2)
     #% solid angle correction
-    #direct_beam_direction = wavevector'/norm(wavevector);
-    #solid_angle_correction = (direct_beam_direction*unit_scattering_vector).^3;
-    direct_beam_direction = wavevector.T / np.linalg.norm(wavevector)
-    solid_angle_correction = np.dot(direct_beam_direction, unit_scattering_vector) ** 3
+    detector_normal = detector_normal/norm(detector_normal)
+    solid_angle_correction = abs(np.dot(detector_normal, unit_scattering_vector) ** 3)
+    
     #corrections = solid_angle_correction.*polarization_correction.*air_absorption;
     corrections = solid_angle_correction * polarization_correction * air_absorption
-    #clear solid_angle_correction polarization_correction air_absorption scattering_vector_mm x y unit_scattering_vector
-    #we will hide this until Dima
-    #del solid_angle_correction, polarization_correction, air_absorption, scattering_vector_mm, unit_scattering_vector
+    
     #if(exist('detector_efficiency_correction.mat','file'))
     #    load detector_efficiency_correction;
     #    corrections = corrections./detector_efficiency_correction(:)';
@@ -347,7 +325,8 @@ def reconstruct_data(filename_template,
                      size_of_cache=100,
                      all_in_memory=False,
                      override=False,
-                     scale=None):
+                     scale=None,
+                     keep_number_of_pixels=False):
 
     def image_name(num):
         return filename_template % num  #test above
@@ -425,7 +404,7 @@ def reconstruct_data(filename_template,
         if output_filename is None:
             raise Exception("output filename shoud be provided")
 
-        rebinned_data = output_file.create_dataset('rebinned_data', shape=number_of_pixels, dtype='float64',
+        rebinned_data = output_file.create_dataset('rebinned_data', shape=number_of_pixels, dtype='float32',
                                                    chunks=True)
         number_of_pixels_rebinned = output_file.create_dataset('number_of_pixels_rebinned', shape=number_of_pixels,
                                                                dtype='int', chunks=True)
@@ -440,6 +419,7 @@ def reconstruct_data(filename_template,
     wavevector = instrument_parameters['wavevector']
     wavelength = instrument_parameters['wavelength']
     oscillation_angle = instrument_parameters['oscillation_angle']
+    detector_normal = instrument_parameters['detector_normal']
 
     #TODO: implement microstepping
     #%in case of microstepping
@@ -464,7 +444,7 @@ def reconstruct_data(filename_template,
     transfrom_matrix = np.linalg.cholesky(np.linalg.inv(normalized_metric_tensor))
 
     corrections = correction_coefficients(h, instrument_parameters, medium, polarization_factor,
-                                          polarization_plane_normal, wavelength, wavevector)
+                                          polarization_plane_normal, wavelength, wavevector, detector_normal)
 
 
     micro_oscillation_angle = oscillation_angle / microsteps
@@ -491,34 +471,52 @@ def reconstruct_data(filename_template,
 
             accumulate_intensity(image, indices, rebinned_data, number_of_pixels_rebinned, number_of_pixels,
                                  all_in_memory)
-
+    
+            
     if all_in_memory:
         if output_filename is None:
             result = {}
         else:
             result = output_file
 
-        result["rebinned_data"] = np.reshape(rebinned_data, number_of_pixels)
-        result["number_of_pixels_rebinned"] = np.reshape(number_of_pixels_rebinned, number_of_pixels)
+        if keep_number_of_pixels:
+            result["rebinned_data"] = np.reshape(rebinned_data, number_of_pixels)
+            result["number_of_pixels_rebinned"] = np.reshape(number_of_pixels_rebinned, number_of_pixels)
+        else:
+            rebinned_data/=number_of_pixels
+            retult["data"] = rebinned_data
     else:
         result = output_file
+        if not keep_number_of_pixels:
+            data = output_file.create_dataset('data', shape=number_of_pixels, dtype='float32', 
+                                              chunks=True)
+            for i in range(number_of_pixels[0]):
+                data[i,:,:]=result["rebinned_data"][i,:,:]/result["number_of_pixels_rebinned"][i,:,:]
+            del result['rebinned_data']
+            del result['number_of_pixels_rebinned']
 
+    if keep_number_of_pixels:
+        result['format']="Yell 0.9"
+    else:
+        result['format']="Yell 1.0"
+            
     result['space_group_nr'] = instrument_parameters['space_group_nr']
     result['unit_cell'] = instrument_parameters['cell']
-    result['maxind'] = maxind
     result['metric_tensor'] = metric_tensor
-    result['number_of_pixels'] = number_of_pixels
-    result['step_size'] = step_size
+    result["step_sizes"] = step_size
+    result["lower_limits"] = -maxind
     result['is_direct'] = False
 
+    
     if output_filename is None:
         return result
     else:
         result.close()
 
         
-#todo: save for PDF-Viewer, get a switch for other version
+        
+    
+        
 #todo: add lower limits, they are needed here
 #todo: add string for file version
-#todo: define stepsize rather than number of pixels
 #todo: think of making the output nexus compatible
