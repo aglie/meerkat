@@ -76,7 +76,7 @@ def det2lab_xds(
 
 
 def test_rotvec2mat():
-    print rotvec2mat(np.array([1, 2, 3]), -2 * np.pi * 90 / 360)
+    print (rotvec2mat(np.array([1, 2, 3]), -2 * np.pi * 90 / 360))
 
 
 def test_det2lab_xds():
@@ -142,7 +142,7 @@ def test_det2lab_xds():
         0]  # the operator **should unpack the instrumental parameters i believe
     fractional_coordinates = np.dot(unit_cell_vectors.T, laboratory_bragg_coordinates)
     assert np.all(np.abs(fractional_coordinates.T - hkl) < 0.15), "Something seems to be wrong"
-    print "Test passed!"
+    print ("Test passed!")
 
 
 if __name__ == "__main__":

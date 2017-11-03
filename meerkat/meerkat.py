@@ -2,7 +2,7 @@ import numpy as np
 import fabio
 import re
 import os
-from det2lab_xds import det2lab_xds, rotvec2mat
+from .det2lab_xds import det2lab_xds, rotvec2mat
 import h5py
 
 
@@ -472,17 +472,17 @@ def reconstruct_data(filename_template,
     #Calculate h for frame number 0
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
-    for frame_number in np.arange(first_image, last_image, image_increment):
-        print "reconstructing frame number ", frame_number
+    for frame_number in np.arange(first_image, last_image+1, image_increment):
+        print ("reconstructing frame number %i" % frame_number)
 
         image = get_image(image_name(frame_number))
         image = image[measured_pixels]
         image = image / corrections * scale[frame_number-first_image]
 
         for m in np.arange(0, microsteps):
-	    #Phi is with respect to phi at frame number 0
+            #Phi is with respect to phi at frame number 0
             phi_minus_phi0=( (frame_number - 0.5) * microsteps + m + 0.5) * micro_oscillation_angle
-	    h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
+            h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
 
             fractional = np.dot(unit_cell_vectors, h_frame)
             del h_frame
