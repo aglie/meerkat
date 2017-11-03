@@ -516,6 +516,8 @@ def reconstruct_data(filename_template,
     else:
         result.close()
 
+        
+#todo: save for PDF-Viewer, get a switch for other version
 #todo: add lower limits, they are needed here
 #todo: add string for file version
 #todo: define stepsize rather than number of pixels
