@@ -2,7 +2,7 @@ from setuptools import setup
 setup(
   name = 'meerkat',
   packages = ['meerkat'],
-  version = '0.3',
+  version = '0.3.1',
   description = 'A program for reciprocal space reconstruction',
   author = 'Arkadiy Simonov, Dmitry Logvinovich',
   author_email = 'aglietto@gmail.com',
