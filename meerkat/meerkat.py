@@ -484,7 +484,7 @@ def reconstruct_data(filename_template,
             result["number_of_pixels_rebinned"] = np.reshape(number_of_pixels_rebinned, number_of_pixels)
         else:
             rebinned_data/=number_of_pixels_rebinned
-            retult["data"] = rebinned_data
+            result["data"] = rebinned_data
     else:
         result = output_file
         if not keep_number_of_pixels:
