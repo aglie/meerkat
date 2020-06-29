@@ -11,7 +11,7 @@ def r_get_numbers(matchgroup, num):
     """A helper function which can be used similarly to fscanf(fid,'%f',num) to extract num arguments from the regex iterator"""
     res = []
     for i in range(num):
-        res.append(float(matchgroup.next().group()))
+        res.append(float(next(matchgroup).group()))
     return np.array(res)
 
 
@@ -73,7 +73,7 @@ def read_XPARM(path_to_XPARM='.'):
 
     # check there is nothing left
     try:
-        f.next()
+        next(f)
     except StopIteration:
         pass
     else:
