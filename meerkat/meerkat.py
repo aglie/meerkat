@@ -375,7 +375,7 @@ def reconstruct_data(filename_template,
 
     # prepare hkl indices
     h = np.mgrid[1:np.size(measured_pixels, 1) + 1, 1:np.size(measured_pixels, 0) + 1].T
-    h = h.reshape((np.size(h) / 2, 2))
+    h = h.reshape((int(np.size(h) / 2), 2))
     h = h[np.reshape(measured_pixels, (-1)), :]
 
     number_of_pixels = np.array(number_of_pixels)
