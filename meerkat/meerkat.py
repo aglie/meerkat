@@ -299,26 +299,43 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
     return corrections
 
 
-def get_image_data(args):
+def get_image_data(filename, semaphore=None):
     """
-    Return (frame number, image data) pair for a given filename, optionally adding it to a queue. 
+    Return (frame number, image data) pair for a given filename. 
      
-    Intended to work with multiprocessing to provide an interable for reconstruct_data.
-    """
+    Parameters
+    ----------
+    filename : str
+        Path to the image file
+    semaphore : multiprocessing.Semaphore, optional
+        Semaphore to be acquired before reading the file. If None, no semaphore
+        This prevents multiprocessing from reading too many images before they are processed.
 
-    filename, queue = args
+    Returns
+    -------
+    filenumber : int
+        Frame number extracted using fabio's 'filenumber' attribute
+    data : ndarray
+        Image data extracted using fabio's 'data' attribute
+    """
 
     if filename is None:
-        if queue is not None:
-            queue.put(None)
         return None
     
+    if semaphore is not None:
+        semaphore.acquire()
 
     im = fabio.open(filename)
-    if queue is not None:
-        queue.put((im.filenumber, im.data))
-    return im.filenumber, im.data
+    filenumber = im.filenumber
+    data = im.data
+    im.close()
 
+    return filenumber, data
+
+def parallel_get_image_data(args):
+    """" Parallel wrapper for get_image_data """
+
+    return get_image_data(*args)
 
 # function [rebinned_data,number_of_pixels_rebinned,Tp,metric_tensor]=...
 # reconstruct_data(filename_template,...
@@ -347,7 +364,8 @@ def reconstruct_data(image_series,
                      all_in_memory=False,
                      override=False,
                      scale=None,
-                     keep_number_of_pixels=False):
+                     keep_number_of_pixels=False,
+                     semaphore=None):
     
     """
     Reconstruct 3D scattering from 2D images
@@ -400,6 +418,17 @@ def reconstruct_data(image_series,
         If True, the output file will be overwritten if it already exists.
         If False, an exception will be raised if the output file already exists.
         Default is False.
+    scale : array_like, optional
+        A 1D array of length number_of_images which defines the scale of each
+        image. Default is an array of ones.
+    keep_number_of_pixels : bool, optional
+        If True, the number of pixels in each voxel will be kept in the output
+        file. If False, the number of pixels in each voxel will be divided out
+        of the reconstructed volume. Default is False.
+    semaphore : multiprocessing.Semaphore, optional
+        Semaphore to be acquired before reading the file. If None, no semaphore
+        This prevents multiprocessing from reading too many images before they are processed.
+
     """
 
     def image_name(num):
@@ -555,6 +584,9 @@ def reconstruct_data(image_series,
             accumulate_intensity(image, indices, rebinned_data, number_of_pixels_rebinned, number_of_pixels,
                                  all_in_memory)
             
+            del(image)
+            semaphore.release()
+
         counter += 1
         if counter == number_of_images:
             # Avoids issues with infinite loops when using generators
@@ -635,17 +667,14 @@ def __main__():
     file_series = [args.filename_template % i for i in range(args.first_image, args.last_image+1)]
 
     if not args.parallel:
-        images = fabio.open_series(file_series)
-        image_iterator = iter(get_image_data([i, None]) for i in file_series)
-    else:
+        image_iterator = iter(get_image_data(i) for i in file_series)
+    else:        
         manager = mp.Manager()
-        # Create queue to hold image data, but limit to 10 images at a time
-        queue = manager.Queue(maxsize=10)
-        pool = mp.Pool(mp.cpu_count() - 2)
-        images = pool.map_async(get_image_data, list(zip(file_series, [queue]*len(file_series))))
+        semaphore = manager.Semaphore(8) # Limit the number of images read in parallel to ~8 (depends on chunksize)
+        pool = mp.Pool(4)
+        image_iterator = pool.imap(parallel_get_image_data, [(i, semaphore) for i in file_series])
 
         pool.close()
-        image_iterator = iter(queue.get, None)
 
     reconstruct_data(image_iterator,
                         args.last_image - args.first_image + 1,
@@ -658,13 +687,14 @@ def __main__():
                         output_filename=args.output_filename,
                         size_of_cache=args.size_of_cache,
                         all_in_memory=args.all_in_memory,
-                        override=args.override)
+                        override=args.override,
+                        semaphore = semaphore,
+                        )
     
 
     print('done', flush=True)
 
     if args.parallel:
-        queue.put([None, None])
         pool.join()
 
     
