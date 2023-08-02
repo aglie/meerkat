@@ -332,6 +332,7 @@ def get_image_data(filename, semaphore=None):
 
     return filenumber, data
 
+
 def parallel_get_image_data(args):
     """" Parallel wrapper for get_image_data """
 
@@ -346,6 +347,8 @@ def parallel_get_image_data(args):
 # measured_pixels,...
 # microsteps,...
 #                     unit_cell_transform_matrix)
+
+
 def reconstruct_data(image_series,
                      number_of_images,
                      maxind,
@@ -355,9 +358,9 @@ def reconstruct_data(image_series,
                      microsteps=[1, 1, 1],
                      #on the angle also allows fractional values. for example 1 1 0.1 will only take every tenth frame
                      unit_cell_transform_matrix=np.eye(3),
-                     polarization_plane_normal=[0, 1, 0],  #default for synchrotron
-                     polarization_factor=1,  #0.5 for laboratory
-                     medium='Air',  #'Air' or 'Helium
+                     polarization_plane_normal=[0, 1, 0],  # default for synchrotron
+                     polarization_factor=1,  # 0.5 for laboratory
+                     medium='Air',  # 'Air' or 'Helium
                      path_to_XPARM=".",
                      output_filename='reconstruction.h5',
                      size_of_cache=100,
@@ -430,13 +433,6 @@ def reconstruct_data(image_series,
         This prevents multiprocessing from reading too many images before they are processed.
 
     """
-
-    def image_name(num):
-        return filename_template % num  #test above
-
-
-    def get_image(fname):
-        return fabio.open(fname).data
 
     #TODO: check mar2000 and 2300 is done properly with respect to oversaturated reflections. Check what happens in other cases too
 
@@ -644,6 +640,7 @@ def reconstruct_data(image_series,
 def __main__():
     import argparse
     import multiprocessing as mp
+    import os
 
     parser = argparse.ArgumentParser(description='Reconstruct 3D scattering from 2D images')
     parser.add_argument('filename_template', help='Template for the filenames of the images, e.g. "image_%%04i.edf"')
@@ -653,9 +650,7 @@ def __main__():
     parser.add_argument('number_of_pixels', type=int, nargs=3, help='Number of pixels along each axis of the reconstructed volume')
     parser.add_argument('-u', '--microsteps', type=float, nargs=3, default=[1,1,1], help='A 3-element array of microsteps along each axis. Default is [1, 1, 1].')
     parser.add_argument('-o', '--output_filename', help='Path to the output file. Default is "reconstruction.h5".')
-    parser.add_argument('-c', '--size_of_cache', type=int, default=100, help='Size of the cache in megabytes. Default is 100.')
-    parser.add_argument('-m', '--medium', default='Air', help='The medium in which the sample is measured. Can be "Air" or "Helium". Default is "Air".')
-    parser.add_argument('-p', '--path_to_XPARM', default='.', help='Path to the XPARM.XDS file. Default is ".".')
+    parser.add_argument('-x', '--path_to_XPARM', default='.', help='Path to the XPARM.XDS file. Default is ".".')
     parser.add_argument('-b', '--reconstruct_in_orthonormal_basis', action='store_true', help='If set, the reconstructed volume will be in the orthonormal basis of the unit cell. If not set, the reconstructed volume will be in the basis of the unit cell vectors as defined in the XPARM.XDS file. Default is not set.')
     parser.add_argument('-a', '--all_in_memory', action='store_true', help='If set, the whole reconstructed volume will be kept in memory. If not set, the reconstructed volume will be written to the output file as it is being reconstructed. Default is not set.')
     parser.add_argument('-r', '--override', action='store_true', help='If set, the output file will be overwritten if it already exists. If not set, an exception will be raised if the output file already exists. Default is not set.')
@@ -664,14 +659,16 @@ def __main__():
 
     args = parser.parse_args()
 
-    file_series = [args.filename_template % i for i in range(args.first_image, args.last_image+1)]
+    file_series = [os.path.normpath(args.filename_template) % i for i in range(args.first_image, args.last_image+1)]
 
     if not args.parallel:
         image_iterator = iter(get_image_data(i) for i in file_series)
     else:        
         manager = mp.Manager()
         semaphore = manager.Semaphore(8) # Limit the number of images read in parallel to ~8 (depends on chunksize)
-        pool = mp.Pool(4)
+        # Set up a pool of workers for parallel image reading
+        # 4 seems to work well for compressed images, more will become limited by I/O speed.
+        pool = mp.Pool(min(4, mp.cpu_count()-2))
         image_iterator = pool.imap(parallel_get_image_data, [(i, semaphore) for i in file_series])
 
         pool.close()
