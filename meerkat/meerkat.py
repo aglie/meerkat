@@ -651,6 +651,8 @@ def __main__():
     parser.add_argument('-u', '--microsteps', type=float, nargs=3, default=[1,1,1], help='A 3-element array of microsteps along each axis. Default is [1, 1, 1].')
     parser.add_argument('-o', '--output_filename', help='Path to the output file. Default is "reconstruction.h5".')
     parser.add_argument('-x', '--path_to_XPARM', default='.', help='Path to the XPARM.XDS file. Default is ".".')
+    parser.add_argument('-t', '--transformation_matrix', nargs=9, type=float, help='A 3x3 matrix that transforms the basis of the unit cell vectors as defined in the XPARM.XDS file to the basis of the unit cell vectors in the reconstructed volume. Default is the identity matrix.')
+    parser.add_argument('-p', '--pixel_mask', type=str, help='Path to Numpy file containing boolean mask for pixels. Default is None.')
     parser.add_argument('-b', '--reconstruct_in_orthonormal_basis', action='store_true', help='If set, the reconstructed volume will be in the orthonormal basis of the unit cell. If not set, the reconstructed volume will be in the basis of the unit cell vectors as defined in the XPARM.XDS file. Default is not set.')
     parser.add_argument('-a', '--all_in_memory', action='store_true', help='If set, the whole reconstructed volume will be kept in memory. If not set, the reconstructed volume will be written to the output file as it is being reconstructed. Default is not set.')
     parser.add_argument('-r', '--override', action='store_true', help='If set, the output file will be overwritten if it already exists. If not set, an exception will be raised if the output file already exists. Default is not set.')
@@ -658,6 +660,16 @@ def __main__():
 
 
     args = parser.parse_args()
+
+    if args.transformation_matrix is None:
+        transformation_matrix = np.eye(3)
+    else:
+        transformation_matrix = np.array(args.transformation_matrix).reshape(3,3)
+
+    if args.pixel_mask is not None:
+        pixel_mask = np.load(args.pixel_mask)
+    else:
+        pixel_mask = None
 
     file_series = [os.path.normpath(args.filename_template) % i for i in range(args.first_image, args.last_image+1)]
 
@@ -678,11 +690,11 @@ def __main__():
                         args.maxind,
                         args.number_of_pixels,
                         reconstruct_in_orthonormal_basis=args.reconstruct_in_orthonormal_basis,
-                        medium=args.medium,
+                        unit_cell_transform_matrix=transformation_matrix,
+                        measured_pixels=pixel_mask,
                         microsteps=args.microsteps,
                         path_to_XPARM=args.path_to_XPARM,
                         output_filename=args.output_filename,
-                        size_of_cache=args.size_of_cache,
                         all_in_memory=args.all_in_memory,
                         override=args.override,
                         semaphore = semaphore,
