@@ -5,6 +5,7 @@ import os
 from .det2lab_xds import det2lab_xds, rotvec2mat
 import h5py
 from numpy.linalg import norm
+from itertools import chain
 
 
 def r_get_numbers(matchgroup, num):
@@ -298,6 +299,45 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
     return corrections
 
 
+def get_image_data(filename, semaphore=None):
+    """
+    Return (frame number, image data) pair for a given filename. 
+     
+    Parameters
+    ----------
+    filename : str
+        Path to the image file
+    semaphore : multiprocessing.Semaphore, optional
+        Semaphore to be acquired before reading the file. If None, no semaphore
+        This prevents multiprocessing from reading too many images before they are processed.
+
+    Returns
+    -------
+    filenumber : int
+        Frame number extracted using fabio's 'filenumber' attribute
+    data : ndarray
+        Image data extracted using fabio's 'data' attribute
+    """
+
+    if filename is None:
+        return None
+    
+    if semaphore is not None:
+        semaphore.acquire()
+
+    im = fabio.open(filename)
+    filenumber = im.filenumber
+    data = im.data
+    im.close()
+
+    return filenumber, data
+
+
+def parallel_get_image_data(args):
+    """" Parallel wrapper for get_image_data """
+
+    return get_image_data(*args)
+
 # function [rebinned_data,number_of_pixels_rebinned,Tp,metric_tensor]=...
 # reconstruct_data(filename_template,...
 # last_image,...
@@ -307,9 +347,10 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
 # measured_pixels,...
 # microsteps,...
 #                     unit_cell_transform_matrix)
-def reconstruct_data(filename_template,
-                     first_image,
-                     last_image,
+
+
+def reconstruct_data(image_series,
+                     number_of_images,
                      maxind,
                      number_of_pixels,
                      reconstruct_in_orthonormal_basis=False,
@@ -317,34 +358,95 @@ def reconstruct_data(filename_template,
                      microsteps=[1, 1, 1],
                      #on the angle also allows fractional values. for example 1 1 0.1 will only take every tenth frame
                      unit_cell_transform_matrix=np.eye(3),
-                     polarization_plane_normal=[0, 1, 0],  #default for synchrotron
-                     polarization_factor=1,  #0.5 for laboratory
-                     medium='Air',  #'Air' or 'Helium
+                     polarization_plane_normal=[0, 1, 0],  # default for synchrotron
+                     polarization_factor=1,  # 0.5 for laboratory
+                     medium='Air',  # 'Air' or 'Helium
                      path_to_XPARM=".",
                      output_filename='reconstruction.h5',
                      size_of_cache=100,
                      all_in_memory=False,
                      override=False,
                      scale=None,
-                     keep_number_of_pixels=False):
+                     keep_number_of_pixels=False,
+                     semaphore=None):
+    
+    """
+    Reconstruct 3D scattering from 2D images
 
-    def image_name(num):
-        return filename_template % num  #test above
+    Parameters
+    ----------
+    image_series : iterable of tuples
+        generator of (frame number, image data) pairs
+    number_of_images : int
+        Number of images in the series
+    maxind : array_like
+        Maximum Miller indices to be reconstructed (reconstruction is symmetrical about the origin)
+    number_of_pixels : array_like
+        Number of pixels along each axis of the reconstructed volume
+    reconstruct_in_orthonormal_basis : bool, optional
+        If True, the reconstructed volume will be in the orthonormal basis
+        of the unit cell. If False, the reconstructed volume will be in the
+        basis of the unit cell vectors as defined in the XPARM.XDS file.
+        Default is False.
+    measured_pixels : array_like, optional
+        A boolean array of the same shape as the images, which is True for
+        pixels which are measured and False for pixels which are not measured.
+        If None, all positive-valued pixels are assumed to be measured. Default is None.
+    microsteps : array_like, optional
+        A 3-element array of microsteps along each axis. Default is [1, 1, 1].
+    unit_cell_transform_matrix : array_like, optional
+        A 3x3 matrix which transforms the unit cell vectors as defined in the
+        XPARM.XDS file to the unit cell vectors of the reconstructed volume.
+        Default is the identity matrix.
+    polarization_plane_normal : array_like, optional
+        A 3-element array which defines the polarization plane of the incident
+        beam. Default is [0, 1, 0], as for synchrotron radiation.
+    polarization_factor : float, optional
+        A number between 0 and 1 which defines the degree of polarization of
+        the incident beam. Default is 1, as for synchrotron radiation.
+    medium : str, optional
+        The medium in which the sample is measured. Can be 'Air' or 'Helium'.
+        Default is 'Air'.
+    path_to_XPARM : str, optional
+        Path to the XPARM.XDS file. Default is '.'.
+    output_filename : str, optional
+        Path to the output file. Default is 'reconstruction.h5'.
+    size_of_cache : int, optional
+        Size of the cache in megabytes. Default is 100.
+    all_in_memory : bool, optional
+        If True, the whole reconstructed volume will be kept in memory.
+        If False, the reconstructed volume will be written to the output file
+        as it is being reconstructed. Default is False.
+    override : bool, optional
+        If True, the output file will be overwritten if it already exists.
+        If False, an exception will be raised if the output file already exists.
+        Default is False.
+    scale : array_like, optional
+        A 1D array of length number_of_images which defines the scale of each
+        image. Default is an array of ones.
+    keep_number_of_pixels : bool, optional
+        If True, the number of pixels in each voxel will be kept in the output
+        file. If False, the number of pixels in each voxel will be divided out
+        of the reconstructed volume. Default is False.
+    semaphore : multiprocessing.Semaphore, optional
+        Semaphore to be acquired before reading the file. If None, no semaphore
+        This prevents multiprocessing from reading too many images before they are processed.
 
-
-    def get_image(fname):
-        return fabio.open(fname).data
+    """
 
     #TODO: check mar2000 and 2300 is done properly with respect to oversaturated reflections. Check what happens in other cases too
 
+    # Get first image in series to determine the pixel mask (if needed)
+    first_image_number, first_image = next(image_series)
+
     if measured_pixels is None:
-        measured_pixels = get_image(image_name(1)) >= 0
+        measured_pixels = first_image >= 0
 
     #TODO: maybe add scale 'median' where scale is defined as a median of a frame divided by a median of a first frame?
     if scale is None:
-        scale = np.ones(last_image-first_image+1)
+        scale = np.ones(number_of_images)
     else:
-        assert(len(scale)==last_image-first_image+1)
+        assert(len(scale)==number_of_images)
 
     if microsteps is None:
         microsteps = (1, 1, 1)
@@ -452,12 +554,18 @@ def reconstruct_data(filename_template,
     #Calculate h for frame number 0
     h_starting = det2lab_xds(h, 0, **instrument_parameters)[0]
 
-    for frame_number in np.arange(first_image, last_image+1, image_increment):
-        print ("reconstructing frame number %i" % frame_number)
+    counter = 0
+    for frame_number, image in chain([(first_image_number, first_image),], image_series):
+    #for frame_number in np.arange(first_image, last_image+1, image_increment):
+        
+        print (f"reconstructing frame number {frame_number} ({100*(counter+1) / number_of_images:.2f} %)")
 
-        image = get_image(image_name(frame_number))
+        if frame_number % image_increment != 0:
+            continue
+
+        #image = get_image(image_name(frame_number))
         image = image[measured_pixels]
-        image = image / corrections * scale[frame_number-first_image]
+        image = image / corrections * scale[counter]
 
         for m in np.arange(0, microsteps):
             #Phi is with respect to phi at frame number 0
@@ -471,7 +579,15 @@ def reconstruct_data(filename_template,
 
             accumulate_intensity(image, indices, rebinned_data, number_of_pixels_rebinned, number_of_pixels,
                                  all_in_memory)
-    
+            
+            del(image)
+            semaphore.release()
+
+        counter += 1
+        if counter == number_of_images:
+            # Avoids issues with infinite loops when using generators
+            break
+    print('reconstruction finished', flush=True)
             
     if all_in_memory:
         if output_filename is None:
@@ -520,3 +636,79 @@ def reconstruct_data(filename_template,
 #todo: add lower limits, they are needed here
 #todo: add string for file version
 #todo: think of making the output nexus compatible
+
+def __main__():
+    import argparse
+    import multiprocessing as mp
+    import os
+
+    parser = argparse.ArgumentParser(description='Reconstruct 3D scattering from 2D images')
+    parser.add_argument('filename_template', help='Template for the filenames of the images, e.g. "image_%%04i.edf"')
+    parser.add_argument('first_image', type=int, help='Number of the first image to be reconstructed')
+    parser.add_argument('last_image', type=int, help='Number of the last image to be reconstructed')
+    parser.add_argument('maxind', type=int, nargs=3, help='Maximum Miller indices to be reconstructed')
+    parser.add_argument('number_of_pixels', type=int, nargs=3, help='Number of pixels along each axis of the reconstructed volume')
+    parser.add_argument('-u', '--microsteps', type=float, nargs=3, default=[1,1,1], help='A 3-element array of microsteps along each axis. Default is [1, 1, 1].')
+    parser.add_argument('-o', '--output_filename', help='Path to the output file. Default is "reconstruction.h5".')
+    parser.add_argument('-x', '--path_to_XPARM', default='.', help='Path to the XPARM.XDS file. Default is ".".')
+    parser.add_argument('-t', '--transformation_matrix', nargs=9, type=float, help='A 3x3 matrix that transforms the basis of the unit cell vectors as defined in the XPARM.XDS file to the basis of the unit cell vectors in the reconstructed volume. Default is the identity matrix.')
+    parser.add_argument('-p', '--pixel_mask', type=str, help='Path to Numpy file containing boolean mask for pixels. Default is None.')
+    parser.add_argument('-b', '--reconstruct_in_orthonormal_basis', action='store_true', help='If set, the reconstructed volume will be in the orthonormal basis of the unit cell. If not set, the reconstructed volume will be in the basis of the unit cell vectors as defined in the XPARM.XDS file. Default is not set.')
+    parser.add_argument('-a', '--all_in_memory', action='store_true', help='If set, the whole reconstructed volume will be kept in memory. If not set, the reconstructed volume will be written to the output file as it is being reconstructed. Default is not set.')
+    parser.add_argument('-r', '--override', action='store_true', help='If set, the output file will be overwritten if it already exists. If not set, an exception will be raised if the output file already exists. Default is not set.')
+    parser.add_argument('--parallel', action='store_true', help='If set, the reconstruction will be performed in parallel. Default is not set.')
+
+
+    args = parser.parse_args()
+
+    if args.transformation_matrix is None:
+        transformation_matrix = np.eye(3)
+    else:
+        transformation_matrix = np.array(args.transformation_matrix).reshape(3,3)
+
+    if args.pixel_mask is not None:
+        pixel_mask = np.load(args.pixel_mask)
+    else:
+        pixel_mask = None
+
+    file_series = [os.path.normpath(args.filename_template) % i for i in range(args.first_image, args.last_image+1)]
+
+    if not args.parallel:
+        image_iterator = iter(get_image_data(i) for i in file_series)
+    else:        
+        manager = mp.Manager()
+        semaphore = manager.Semaphore(8) # Limit the number of images read in parallel to ~8 (depends on chunksize)
+        # Set up a pool of workers for parallel image reading
+        # 4 seems to work well for compressed images, more will become limited by I/O speed.
+        pool = mp.Pool(min(4, mp.cpu_count()-2))
+        image_iterator = pool.imap(parallel_get_image_data, [(i, semaphore) for i in file_series])
+
+        pool.close()
+
+    reconstruct_data(image_iterator,
+                        args.last_image - args.first_image + 1,
+                        args.maxind,
+                        args.number_of_pixels,
+                        reconstruct_in_orthonormal_basis=args.reconstruct_in_orthonormal_basis,
+                        unit_cell_transform_matrix=transformation_matrix,
+                        measured_pixels=pixel_mask,
+                        microsteps=args.microsteps,
+                        path_to_XPARM=args.path_to_XPARM,
+                        output_filename=args.output_filename,
+                        all_in_memory=args.all_in_memory,
+                        override=args.override,
+                        semaphore = semaphore,
+                        )
+    
+
+    print('done', flush=True)
+
+    if args.parallel:
+        pool.join()
+
+    
+
+
+if __name__ == '__main__':
+
+    __main__()
