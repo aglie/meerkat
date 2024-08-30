@@ -40,7 +40,8 @@ reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf',
         output_filename='reconstruction.h5',
         all_in_memory=False,
         size_of_cache=100,
-        override=True)
+        override=True,
+        scale=None) #Here you can provide a list of coefficients to scale each frame during reconstruction, for instance in a crystal which was unevenly illuminated during experiment, or the primary beam intensity was varying.
 ```
 
 ## Output
