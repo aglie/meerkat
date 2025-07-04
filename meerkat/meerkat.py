@@ -38,7 +38,7 @@ def read_XPARM(path_to_XPARM='.'):
         text = f.read()
 
     # parse the rest to numbers
-    f = re.compile('-?\d+\.?\d*').finditer(text)
+    f = re.compile(r"-?\d+\.?\d*").finditer(text)
 
     try:
         result = dict(starting_frame=r_get_numbers(f, 1),
@@ -356,7 +356,7 @@ def reconstruct_data(image_series,
                      reconstruct_in_orthonormal_basis=False,
                      measured_pixels=None,
                      microsteps=[1, 1, 1],
-                     #on the angle also allows fractional values. for example 1 1 0.1 will only take every tenth frame
+                     #TODO: on the angle also allows fractional values. for example 1 1 0.1 will only take every tenth frame
                      unit_cell_transform_matrix=np.eye(3),
                      polarization_plane_normal=[0, 1, 0],  # default for synchrotron
                      polarization_factor=1,  # 0.5 for laboratory
@@ -442,7 +442,6 @@ def reconstruct_data(image_series,
     if measured_pixels is None:
         measured_pixels = first_image >= 0
 
-    #TODO: maybe add scale 'median' where scale is defined as a median of a frame divided by a median of a first frame?
     if scale is None:
         scale = np.ones(number_of_images)
     else:
@@ -480,10 +479,12 @@ def reconstruct_data(image_series,
     h = h.reshape((int(np.size(h) / 2), 2))
     h = h[np.reshape(measured_pixels, (-1)), :]
 
+    #TODO: change to accumulator of primary beam sum. This would move scaling here
+    #TODO: rename scale to primary_beam_count or something similar when above is implemented
     number_of_pixels = np.array(number_of_pixels)
     assert len(number_of_pixels) == 3
 
-    maxind = np.array(maxind, dtype=np.float_)
+    maxind = np.array(maxind, dtype=np.float32)
     assert len(maxind) == 3
 
     step_size_inv = 1.0 * (number_of_pixels - 1) / maxind / 2
@@ -500,7 +501,7 @@ def reconstruct_data(image_series,
         output_file = create_h5py_with_large_cache(output_filename, size_of_cache)
 
     if all_in_memory:
-        rebinned_data = np.zeros(np.prod(number_of_pixels),dtype=np.float_)
+        rebinned_data = np.zeros(np.prod(number_of_pixels),dtype=np.float32)
         number_of_pixels_rebinned = np.zeros(np.prod(number_of_pixels),dtype=np.int_)
     else:
         if output_filename is None:
@@ -548,7 +549,13 @@ def reconstruct_data(image_series,
     corrections = correction_coefficients(h, instrument_parameters, medium, polarization_factor,
                                           polarization_plane_normal, wavelength, wavevector, detector_normal)
 
+    #TODO: implement uneven step angles
+    #something like phi_minus_phi0 = phi_minus_phi0_list[(frame_number-first_image)*microsteps + m]
+    #fn = np.arange(first_image, last_image+1, image_increment*microsteps)
+    #phi_minus_phi0_list=( (fn - 0.5) * microsteps + m + 0.5) * micro_oscillation_angle
+    #Test it works corrects for all versions of microstepping
 
+    #If uneven steps, linear interpolation between given values
     micro_oscillation_angle = oscillation_angle / microsteps
 
     #Calculate h for frame number 0
@@ -569,6 +576,9 @@ def reconstruct_data(image_series,
 
         for m in np.arange(0, microsteps):
             #Phi is with respect to phi at frame number 0
+
+            #TODO: implement uneven step here. Just tabulate all increment angles, expand by microsteps with linear interpolation
+            #something like phi_minus_phi0 = phi_minus_phi0_list[(frame_number-first_image)*microsteps + m]
             phi_minus_phi0=( (frame_number - 0.5) * microsteps + m + 0.5) * micro_oscillation_angle
             h_frame = np.dot(rotvec2mat(rotation_axis, -np.deg2rad(phi_minus_phi0)), h_starting)
 
