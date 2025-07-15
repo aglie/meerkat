@@ -639,86 +639,166 @@ def reconstruct_data(image_series,
     else:
         result.close()
 
-        
-        
-    
-        
-#todo: add lower limits, they are needed here
-#todo: add string for file version
-#todo: think of making the output nexus compatible
 
-def __main__():
-    import argparse
+# todo: add lower limits, they are needed here
+# todo: add string for file version
+# todo: think of making the output nexus compatible
+
+def run_reconstruction(args):
     import multiprocessing as mp
     import os
+    import numpy as np
 
-    parser = argparse.ArgumentParser(description='Reconstruct 3D scattering from 2D images')
-    parser.add_argument('filename_template', help='Template for the filenames of the images, e.g. "image_%%04i.edf"')
-    parser.add_argument('first_image', type=int, help='Number of the first image to be reconstructed')
-    parser.add_argument('last_image', type=int, help='Number of the last image to be reconstructed')
-    parser.add_argument('maxind', type=int, nargs=3, help='Maximum Miller indices to be reconstructed')
-    parser.add_argument('number_of_pixels', type=int, nargs=3, help='Number of pixels along each axis of the reconstructed volume')
-    parser.add_argument('-u', '--microsteps', type=float, nargs=3, default=[1,1,1], help='A 3-element array of microsteps along each axis. Default is [1, 1, 1].')
-    parser.add_argument('-o', '--output_filename', help='Path to the output file. Default is "reconstruction.h5".')
-    parser.add_argument('-x', '--path_to_XPARM', default='.', help='Path to the XPARM.XDS file. Default is ".".')
-    parser.add_argument('-t', '--transformation_matrix', nargs=9, type=float, help='A 3x3 matrix that transforms the basis of the unit cell vectors as defined in the XPARM.XDS file to the basis of the unit cell vectors in the reconstructed volume. Default is the identity matrix.')
-    parser.add_argument('-p', '--pixel_mask', type=str, help='Path to Numpy file containing boolean mask for pixels. Default is None.')
-    parser.add_argument('-b', '--reconstruct_in_orthonormal_basis', action='store_true', help='If set, the reconstructed volume will be in the orthonormal basis of the unit cell. If not set, the reconstructed volume will be in the basis of the unit cell vectors as defined in the XPARM.XDS file. Default is not set.')
-    parser.add_argument('-a', '--all_in_memory', action='store_true', help='If set, the whole reconstructed volume will be kept in memory. If not set, the reconstructed volume will be written to the output file as it is being reconstructed. Default is not set.')
-    parser.add_argument('-r', '--override', action='store_true', help='If set, the output file will be overwritten if it already exists. If not set, an exception will be raised if the output file already exists. Default is not set.')
-    parser.add_argument('--parallel', action='store_true', help='If set, the reconstruction will be performed in parallel. Default is not set.')
-
-
-    args = parser.parse_args()
-
-    if args.transformation_matrix is None:
+    if getattr(args, 'transformation_matrix', None) is None:
         transformation_matrix = np.eye(3)
     else:
-        transformation_matrix = np.array(args.transformation_matrix).reshape(3,3)
+        transformation_matrix = np.array(args.transformation_matrix)
+        transformation_matrix = transformation_matrix.reshape(3, 3)
 
-    if args.pixel_mask is not None:
+    if getattr(args, 'pixel_mask', None) is not None:
         pixel_mask = np.load(args.pixel_mask)
     else:
         pixel_mask = None
 
-    file_series = [os.path.normpath(args.filename_template) % i for i in range(args.first_image, args.last_image+1)]
+    file_series = [
+        os.path.normpath(args.filename_template) % i
+        for i in range(args.first_image, args.last_image + 1)
+    ]
 
-    if not args.parallel:
+    semaphore = None
+    if not getattr(args, 'parallel', False):
         image_iterator = iter(get_image_data(i) for i in file_series)
-    else:        
+    else:
         manager = mp.Manager()
-        semaphore = manager.Semaphore(8) # Limit the number of images read in parallel to ~8 (depends on chunksize)
-        # Set up a pool of workers for parallel image reading
-        # 4 seems to work well for compressed images, more will become limited by I/O speed.
-        pool = mp.Pool(min(4, mp.cpu_count()-2))
-        image_iterator = pool.imap(parallel_get_image_data, [(i, semaphore) for i in file_series])
-
+        semaphore = manager.Semaphore(8)
+        pool = mp.Pool(min(4, mp.cpu_count() - 2))
+        image_iterator = pool.imap(
+            parallel_get_image_data,
+            [(i, semaphore) for i in file_series]
+        )
         pool.close()
 
-    reconstruct_data(image_iterator,
-                        args.last_image - args.first_image + 1,
-                        args.maxind,
-                        args.number_of_pixels,
-                        reconstruct_in_orthonormal_basis=args.reconstruct_in_orthonormal_basis,
-                        unit_cell_transform_matrix=transformation_matrix,
-                        measured_pixels=pixel_mask,
-                        microsteps=args.microsteps,
-                        path_to_XPARM=args.path_to_XPARM,
-                        output_filename=args.output_filename,
-                        all_in_memory=args.all_in_memory,
-                        override=args.override,
-                        semaphore = semaphore,
-                        )
-    
+    reconstruct_data(
+        image_iterator,
+        args.last_image - args.first_image + 1,
+        args.maxind,
+        args.number_of_pixels,
+        reconstruct_in_orthonormal_basis=getattr(
+            args, 'reconstruct_in_orthonormal_basis', False),
+        unit_cell_transform_matrix=transformation_matrix,
+        measured_pixels=pixel_mask,
+        microsteps=getattr(args, 'microsteps', [1, 1, 1]),
+        path_to_XPARM=getattr(args, 'path_to_XPARM', '.'),
+        output_filename=getattr(args, 'output_filename', None),
+        all_in_memory=getattr(args, 'all_in_memory', False),
+        override=getattr(args, 'override', False),
+        semaphore=semaphore,
+    )
 
     print('done', flush=True)
 
-    if args.parallel:
+    if getattr(args, 'parallel', False):
         pool.join()
 
-    
+
+def __main__(args=None):
+    import argparse
+    if args is None:
+        parser = argparse.ArgumentParser(
+            description='Reconstruct 3D scattering from 2D images'
+        )
+        parser.add_argument(
+            'filename_template',
+            help=(
+                'Template for the filenames of the images, e.g. '
+                '"image_%%04i.edf"'
+            )
+        )
+        parser.add_argument(
+            'first_image', type=int,
+            help='Number of the first image to be reconstructed'
+        )
+        parser.add_argument(
+            'last_image', type=int,
+            help='Number of the last image to be reconstructed'
+        )
+        parser.add_argument(
+            'maxind', type=int, nargs=3,
+            help='Maximum Miller indices to be reconstructed'
+        )
+        parser.add_argument(
+            'number_of_pixels', type=int, nargs=3,
+            help=(
+                'Number of pixels along each axis of the reconstructed volume'
+            )
+        )
+        parser.add_argument(
+            '-u', '--microsteps', type=float, nargs=3, default=[1, 1, 1],
+            help=(
+                'A 3-element array of microsteps along each axis. '
+                'Default is [1, 1, 1].'
+            )
+        )
+        parser.add_argument(
+            '-o', '--output_filename',
+            help='Path to the output file. Default is "reconstruction.h5".'
+        )
+        parser.add_argument(
+            '-x', '--path_to_XPARM', default='.',
+            help='Path to the XPARM.XDS file. Default is ".".'
+        )
+        parser.add_argument(
+            '-t', '--transformation_matrix', nargs=9, type=float,
+            help=(
+                'A 3x3 matrix that transforms the basis of the unit cell '
+                'vectors as defined in the XPARM.XDS file to the basis of '
+                'the unit cell vectors in the reconstructed volume. '
+                'Default is the identity matrix.'
+            )
+        )
+        parser.add_argument(
+            '-p', '--pixel_mask', type=str,
+            help=(
+                'Path to Numpy file containing boolean mask for pixels. '
+                'Default is None.'
+            )
+        )
+        parser.add_argument(
+            '-b', '--reconstruct_in_orthonormal_basis', action='store_true',
+            help=(
+                'If set, the reconstructed volume will be in the orthonormal '
+                'basis of the unit cell. If not set, the reconstructed volume '
+                'will be in the basis of the unit cell vectors as defined in '
+                'the XPARM.XDS file. Default is not set.'
+            )
+        )
+        parser.add_argument(
+            '-a', '--all_in_memory', action='store_true',
+            help=(
+                'If set, the whole reconstructed volume will be kept in '
+                'memory. If not set, the reconstructed volume will be '
+                'written to the output file as it is being reconstructed. '
+                'Default is not set.'
+            )
+        )
+        parser.add_argument(
+            '-r', '--override', action='store_true',
+            help=(
+                'If set, the output file will be overwritten if it already '
+                'exists. If not set, an exception will be raised if the '
+                'output file already exists. Default is not set.'
+            )
+        )
+        parser.add_argument(
+            '--parallel', action='store_true',
+            help=(
+                'If set, the reconstruction will be performed in parallel. '
+                'Default is not set.'
+            )
+        )
+        args = parser.parse_args()
+    run_reconstruction(args)
 
 
 if __name__ == '__main__':
-
     __main__()
