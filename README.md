@@ -44,6 +44,17 @@ reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf',
         scale=None) #Here you can provide a list of coefficients to scale each frame during reconstruction, for instance in a crystal which was unevenly illuminated during experiment, or the primary beam intensity was varying.
 ```
 
+### Parallel usage
+
+In order to speed up the reconstruction, Meerkat can be run in parallel as a command line script. This can be achieved by running the following command:
+
+``` bash
+python -m meerkat.meerkat filename_template first_image last_image maxind number_of_pixels 
+```
+
+A number of other options can be supplied to the script, see `python -m meerkat.meerkat --help` for more details.
+
+
 ## Output
 The result is saved as an [hdf5](“http://www.hdfgroup.org/HDF5/”) file. The reconstruction is held in two datasets: `rebinned_data` and `number_of_pixels_rebinned`, the former is a corrected sum of intensities of reconstructed pixels, while the latter counts how many pixels were reconstructed. The scattering intensity can be obtained by dividing the two: `rebinned_data[i,j,k]/number_of_pixels_rebinned[i,j,k]`.
 
