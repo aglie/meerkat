@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+
+# reconstruction outputs
+*.h5
+!tests/data/*.h5

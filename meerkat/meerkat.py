@@ -1,10 +1,12 @@
-import numpy as np
-import fabio
-import re
 import os
-from .det2lab_xds import det2lab_xds, rotvec2mat
+import re
+
+import fabio
 import h5py
+import numpy as np
 from numpy.linalg import norm
+
+from .det2lab_xds import det2lab_xds, rotvec2mat
 
 
 def r_get_numbers(matchgroup, num):
@@ -268,8 +270,8 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
 
     mu = air_absorption_coefficient(medium, wavelength)
     air_absorption = np.exp(
-        -mu * np.sqrt(np.sum(scattering_vector_mm ** 2, axis=0)))  
-    
+        -mu * np.sqrt(np.sum(scattering_vector_mm ** 2, axis=0)))
+
     #% Polarisation
     polarization_plane_normal = np.array(polarization_plane_normal)
     polarization_plane_normal = polarization_plane_normal / np.linalg.norm(polarization_plane_normal)  # just in case
@@ -282,10 +284,10 @@ def correction_coefficients(h, instrument_parameters, medium, polarization_facto
     #% solid angle correction
     detector_normal = detector_normal/norm(detector_normal)
     solid_angle_correction = abs(np.dot(detector_normal, unit_scattering_vector) ** 3)
-    
+
     #corrections = solid_angle_correction.*polarization_correction.*air_absorption;
     corrections = solid_angle_correction * polarization_correction * air_absorption
-    
+
     #if(exist('detector_efficiency_correction.mat','file'))
     #    load detector_efficiency_correction;
     #    corrections = corrections./detector_efficiency_correction(:)';
@@ -481,8 +483,8 @@ def reconstruct_data(filename_template,
 
             accumulate_intensity(image, indices, rebinned_data, number_of_pixels_rebinned, number_of_pixels,
                                  all_in_memory)
-    
-            
+
+
     if all_in_memory:
         if output_filename is None:
             result = {}
@@ -498,7 +500,7 @@ def reconstruct_data(filename_template,
     else:
         result = output_file
         if not keep_number_of_pixels:
-            data = output_file.create_dataset('data', shape=number_of_pixels, dtype='float32', 
+            data = output_file.create_dataset('data', shape=number_of_pixels, dtype='float32',
                                               chunks=True)
             for i in range(number_of_pixels[0]):
                 data[i,:,:]=result["rebinned_data"][i,:,:]/result["number_of_pixels_rebinned"][i,:,:]
@@ -509,7 +511,7 @@ def reconstruct_data(filename_template,
         result['format']="Yell 0.9"
     else:
         result['format']="Yell 1.0"
-            
+
     result['space_group_nr'] = instrument_parameters['space_group_nr']
     result['unit_cell'] = instrument_parameters['cell']
     result['metric_tensor'] = metric_tensor
@@ -517,16 +519,16 @@ def reconstruct_data(filename_template,
     result["lower_limits"] = -maxind
     result['is_direct'] = False
 
-    
+
     if output_filename is None:
         return result
     else:
         result.close()
 
-        
-        
-    
-        
+
+
+
+
 #todo: add lower limits, they are needed here
 #todo: add string for file version
 #todo: think of making the output nexus compatible

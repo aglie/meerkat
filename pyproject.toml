@@ -1,0 +1,114 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meerkat"
+description = "A program for reciprocal space reconstruction"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Arkadiy Simonov", email = "aglietto@gmail.com" },
+    { name = "Dmitry Logvinovich" },
+]
+keywords = [
+    "crystallography",
+    "single crystal",
+    "reciprocal space reconstruction",
+    "diffuse scattering",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+# Floors, not pins. numpy>=1.22 is the first release with the `np.random.Generator`
+# and dtype behaviour this code assumes; h5py>=3 for the low-level API used by the
+# out-of-core accumulator.
+dependencies = [
+    "numpy>=1.22",
+    "h5py>=3.0",
+    "fabio>=0.11",
+]
+
+[project.optional-dependencies]
+# `refine` pulls scipy for improve-orientation. It is NOT a core dependency:
+# reconstruction does not need it, and meerkat.xds must stay numpy-only.
+refine = ["scipy>=1.7"]
+# `cbf` is only needed to apply XDS's X/Y-CORRECTIONS tables during refinement.
+cbf = ["cbf"]
+test = ["pytest>=7", "scipy>=1.7"]
+dev = ["pytest>=7", "scipy>=1.7", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/aglie/meerkat"
+Repository = "https://github.com/aglie/meerkat.git"
+
+[tool.setuptools]
+packages = ["meerkat"]
+
+[tool.setuptools.dynamic]
+version = { attr = "meerkat._version.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # Surface numpy deprecations as errors in our own code: float(1-element-array)
+    # is deprecated since numpy 1.25 and is a real latent break in write_xparm.
+    "error::DeprecationWarning:meerkat.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "TID"]
+ignore = [
+    "E741",   # ambiguous name `l` -- it means Miller index l here, not the digit 1
+    "B905",   # zip(strict=) is 3.10+, and we support 3.9
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# meerkat.xds is the dependency surface for the separate meerkat-ewald package.
+# It must stay importable with numpy alone -- no fabio, no h5py, no scipy. These
+# bans make `git mv meerkat/xds meerkat_xds` a mechanical step if we ever split it.
+"meerkat.recon".msg = "meerkat.xds must not depend on meerkat.recon (keep it numpy-only)"
+"meerkat.io".msg = "meerkat.xds must not depend on meerkat.io (keep it numpy-only)"
+"meerkat.legacy".msg = "meerkat.xds must not depend on meerkat.legacy (keep it numpy-only)"
+
+[tool.ruff.lint.per-file-ignores]
+# The bans above are only meaningful inside meerkat/xds/; everywhere else these
+# imports are expected and fine.
+"meerkat/recon/*" = ["TID251"]
+"meerkat/io/*" = ["TID251"]
+"meerkat/cli/*" = ["TID251"]
+"meerkat/config/*" = ["TID251"]
+"meerkat/refine/*" = ["TID251"]
+"meerkat/legacy.py" = ["TID251"]
+"tests/*" = ["TID251"]
+
+# --- Deferred legacy debt. Delete this block in Stage 4. -----------------------
+# meerkat/meerkat.py is the pre-modernization monolith. Every rule listed here is a
+# real finding that Stage 4 (engine decomposition) fixes at its source; silencing
+# them now keeps CI meaningful for new code instead of drowning it in known noise.
+# Specifically:
+#   B006/B008 - microsteps=[1,1,1] and unit_cell_transform_matrix=np.eye(3) mutable
+#               defaults (latent, not live: neither is mutated today).
+#   F841      - `transfrom_matrix` (sic) is computed and never used; starting_frame
+#               and starting_angle are unpacked but reach det2lab_xds via **kwargs.
+#   E731      - the `to_index` lambda becomes Grid.to_index.
+#   E501      - long lines; reformatted when the function is broken up.
+"meerkat/meerkat.py" = ["TID251", "B006", "B008", "B007", "B904", "F841", "E731", "E501", "UP031", "W291"]
+"meerkat/det2lab_xds.py" = ["E501"]
