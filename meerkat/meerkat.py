@@ -168,7 +168,9 @@ Allows to open the hdf5 file with specified cache size
     settings = list(propfaid.get_cache())
     settings[2] = 1024 * 1024 * cache_size_mb
     propfaid.set_cache(*settings)
-    fid = h5py.h5f.create(bytes(filename, encoding="utf-8") , flags=h5py.h5f.ACC_EXCL, fapl=propfaid)
+    # os.fsencode, not bytes(filename, encoding=...): the latter only accepts str, so
+    # a pathlib.Path raised "encoding without a string argument". The CLI passes Paths.
+    fid = h5py.h5f.create(os.fsencode(filename), flags=h5py.h5f.ACC_EXCL, fapl=propfaid)
     fin = h5py.File(fid)
     return fin
 

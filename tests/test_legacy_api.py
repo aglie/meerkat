@@ -131,3 +131,12 @@ def test_out_of_core_matches_in_memory(tmp_path):
         on_disk = f["data"][:]
 
     np.testing.assert_array_equal(on_disk, in_memory)
+
+
+def test_output_filename_accepts_pathlib_path(tmp_path):
+    """create_h5py_with_large_cache used bytes(filename, encoding='utf-8'), which only
+    accepts str -- a Path raised "encoding without a string argument". The CLI passes
+    Paths around, so this was a real trap sitting one call away."""
+    out = tmp_path / "path.h5"  # a Path, not a str
+    run_reference_reconstruction(tmp_path, output_filename=out, all_in_memory=False)
+    assert out.exists()

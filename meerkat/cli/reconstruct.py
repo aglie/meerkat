@@ -11,6 +11,8 @@ would silently override the config file.
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -38,6 +40,22 @@ def add_arguments(parser):
         metavar="FILE",
         default=None,
         help="write the resolved configuration to FILE (use '-' for stdout)",
+    )
+    parser.add_argument(
+        "--no-provenance",
+        action="store_true",
+        help="do not record how this reconstruction was made in the output file",
+    )
+    parser.add_argument(
+        "--no-sidecar",
+        action="store_true",
+        help="do not write the <output>.mrk sidecar next to the output file",
+    )
+    parser.add_argument(
+        "--checksum-frames",
+        action="store_true",
+        help="also record a sha256 of every input frame. Off by default: hashing "
+        "100 GB of frames to write a 1 GB output is rarely worth it",
     )
 
     group = parser.add_argument_group("reconstruction parameters")
@@ -113,7 +131,31 @@ def run(args) -> int:
             print(text, end="")
         return 0
 
+    config_text = Path(args.config).read_text() if args.config else ""
+
     _reconstruct(params)
+
+    output = Path(params.output_filename)
+
+    if not args.no_sidecar:
+        # A text file beside the data is the trace someone will actually find in two
+        # years. The copy inside the .h5 is for when this one gets lost.
+        sidecar = output.with_suffix(output.suffix + ".mrk")
+        sidecar.write_text(text)
+        print(f"wrote {sidecar}")
+
+    if not args.no_provenance:
+        from ..io import write_provenance
+
+        write_provenance(
+            output,
+            params,
+            config_text=config_text,
+            argv=["meerkat", "reconstruct", *(sys.argv[2:] if len(sys.argv) > 2 else [])],
+            checksum_frames=args.checksum_frames,
+        )
+        print(f"recorded provenance in {output}")
+
     return 0
 
 

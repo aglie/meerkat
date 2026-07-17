@@ -1,67 +1,179 @@
 # meerkat
-A python library for performing reciprocal space reconstruction from single crystal x-ray measurements. 
+
+A python library and command-line tool for reciprocal space reconstruction from
+single crystal x-ray measurements.
 
 ## Installation
-The package can be installed using pip:
 
-    pip install meerkat
-    
-On Windows we recommend to use virtual environments like [anaconda](https://store.continuum.io/cshop/anaconda/) which simplify python installation. 
+```
+pip install meerkat
+```
+
+Refining orientation matrices additionally needs scipy:
+
+```
+pip install meerkat[refine]
+```
+
+On Windows we recommend a virtual environment such as
+[anaconda](https://www.anaconda.com/), which simplifies the python installation.
 
 #### Note for anaconda users
 
-Some anaconda distributions fail on `pip install meerkat` while trying to compile `h5py`. In this case the following commands work:
+Some anaconda distributions fail on `pip install meerkat` while trying to compile
+`h5py`. Anaconda ships `h5py` already, so this works instead:
 
 ```
 pip install meerkat --no-deps
 pip install fabio
 ```
 
-Since anaconda comes with preinstalled `h5py` it is not required to reinstall it with pip, and the following command resolves all dependencies.
-
 ## Usage
 
-The reciprocal space reconstruction is based on the orientation matrix determined by [XDS](“xds.mpimf-heidelberg.mpg.de”). Thus, in order to run the reconstruction, in addition to the diffraction frames, `meerkat` requires either `XPARM.XDS` or `GXPARM.XDS`.
+Reconstruction is based on the orientation matrix determined by
+[XDS](https://xds.mpimf-heidelberg.mpg.de), so in addition to the diffraction frames
+`meerkat` needs an `XPARM.XDS` or `GXPARM.XDS`.
 
-The reconstruction can be run using the following python script:
+There are three ways to drive it, and they all run the same code.
+
+### A parameter file
+
+The recommended way. The file stays next to your data and records what you did.
 
 ```
+# reconstruction.mrk
+DATA_FILE_TEMPLATE  ../frames/PdCPTN01002_%05i.cbf
+XPARM_FILE          /home/arkadiy/work/data/PdCPTN01002/xds
+FIRST_FRAME         1
+LAST_FRAME          3600
+
+NUMBER_OF_PIXELS    801 801 801
+LOWER_LIMITS        -4 -5 -16
+SYMMETRIC_LIMITS            # so h = -4..4, k = -5..5, l = -16..16
+
+POLARIZATION_FACTOR 0.5     # 0.5 for a laboratory source, 1 for a synchrotron
+OUTPUT_FILENAME     reconstruction.h5
+```
+
+```
+meerkat reconstruct reconstruction.mrk
+```
+
+Comments start with `#` or `!`. `meerkat reconstruct --help` lists every keyword.
+
+### Command-line flags
+
+Every keyword is also a flag, and flags override the file. Useful for scripting and
+for trying one thing without editing anything:
+
+```
+meerkat reconstruct reconstruction.mrk --polarization-factor 1 --output-filename test.h5
+```
+
+Check what a run *would* do, without doing it:
+
+```
+meerkat reconstruct reconstruction.mrk --dry-run
+```
+
+### From python
+
+The 0.3.x API still works unchanged:
+
+```python
 from meerkat import reconstruct_data
 
-#reconstruct dataset
 reconstruct_data(filename_template='../frames/PdCPTN01002_%05i.cbf',
-        first_image=1,
-        last_image=3600,
-        reconstruct_in_orthonormal_basis=False,
-        maxind=[4,5,16], #the reconstruction will be made for h=-4...4, k=-5...5, l=-16...16
-        number_of_pixels=[801, 801, 801], #The resulting size of the array. Controls the step size
-        polarization_factor=0.5,
-        path_to_XPARM='/home/arkadiy/work/data/PdCPTN01002/xds',
-        output_filename='reconstruction.h5',
-        all_in_memory=False,
-        size_of_cache=100,
-        override=True,
-        scale=None) #Here you can provide a list of coefficients to scale each frame during reconstruction, for instance in a crystal which was unevenly illuminated during experiment, or the primary beam intensity was varying.
+                 first_image=1,
+                 last_image=3600,
+                 maxind=[4, 5, 16],          # h = -4..4, k = -5..5, l = -16..16
+                 number_of_pixels=[801, 801, 801],
+                 polarization_factor=0.5,
+                 path_to_XPARM='/home/arkadiy/work/data/PdCPTN01002/xds',
+                 output_filename='reconstruction.h5',
+                 all_in_memory=False,
+                 scale=None)  # per-frame scale factors, e.g. for uneven illumination
+```
+
+## Other commands
+
+```
+meerkat info FILE                  # summarize an XPARM or a reconstruction
+meerkat dump-config OUTPUT.h5      # recover the config that made a reconstruction
+meerkat improve-orientation ...    # refine geometry against indexed spots
+meerkat transform-xparm ...        # re-index a crystal to a different cell setting
 ```
 
 ## Output
-The result is saved as an [hdf5](“http://www.hdfgroup.org/HDF5/”) file. The reconstruction is held in two datasets: `rebinned_data` and `number_of_pixels_rebinned`, the former is a corrected sum of intensities of reconstructed pixels, while the latter counts how many pixels were reconstructed. The scattering intensity can be obtained by dividing the two: `rebinned_data[i,j,k]/number_of_pixels_rebinned[i,j,k]`.
 
-In addition to the two datasets, the reconstruction file contains parameters of the reconstruction `maxind`,  `number_of_pixels`, calculated `step_size`, and information from XDS files: `unit_cell`, `space_group_nr` and `metric_tensor`.
+The result is an [hdf5](https://www.hdfgroup.org/solutions/hdf5/) file in Yell 1.0
+format. The scattering intensity is in the `data` dataset. Voxels the Ewald sphere
+never swept are `NaN` — that is how "no data here" is signalled, so mind it when
+plotting.
+
+Alongside `data` the file carries the grid (`lower_limits`, `step_sizes`) and
+information from XDS (`unit_cell`, `space_group_nr`, `metric_tensor`).
+
+Setting `OUTPUT_FORMAT YELL_0.9` writes the older layout instead: two datasets,
+`rebinned_data` (the corrected sum of pixel intensities) and
+`number_of_pixels_rebinned` (how many pixels contributed), whose ratio is the
+intensity.
+
+### Provenance
+
+Every reconstruction records how it was made, in a `meerkat_provenance` group: the
+config file you wrote, a resolved and re-runnable copy of it, the command line, the
+contents and sha256 of the XPARM, package versions, and which frames were used. A
+`.mrk` sidecar is also written next to the output.
+
+So a stray `.h5` can always explain itself:
+
+```
+meerkat dump-config reconstruction.h5           # a config that reproduces it
+meerkat dump-config reconstruction.h5 --all     # everything recorded
+```
+
+Re-running the recovered config reproduces the data bit for bit. The group is
+invisible to Yell, which opens `data` by name.
 
 ## Reconstruction coordinates
 
-By default the reconstruction is performed in crystallographic coordinates. Such reconstructions can be easily symmetry-averaged. Also the numerical analysis of diffuse scattering is more straightforwardly performed in crystallographic coordinates (for example the program [Yell](“https://github.com/YellProgram/Yell/”) uses such coordinates).
+By default the reconstruction is in crystallographic coordinates. These are easy to
+symmetry-average, and numerical analysis of diffuse scattering is more
+straightforward in them — [Yell](https://github.com/YellProgram/Yell/) uses these
+coordinates.
 
-The downside of the crystallographic coordinates is that they are in general not orthorombic, which makes the reconstructions in such coordinates slightly more complicated to plot. If the reconstructions are required in orthonormal coordinates, this can be achieved by setting: 
+The downside is that crystallographic coordinates are generally not orthogonal, which
+makes plotting slightly more involved. For an orthonormal reconstruction:
 
-     reconstruct_in_orthonormal_basis=True
+```
+RECONSTRUCT_IN_ORTHONORMAL_BASIS
+```
 
-If the reconstruction is performed in orthonormal basis, the new basis a\*',b\*',c\*' is calculated from the crystal a\*,b\*,c\* vectors. In the new basis a'\* is parallel to a\*, the b'\* is in the plane spawned by a\* and b\*, and c'\* is orthogonal to a'\* and b'\*.
+The new basis a\*', b\*', c\*' is derived from the crystal's a\*, b\*, c\*: a'\* is
+parallel to a\*, b'\* lies in the a\*–b\* plane, and c'\* is orthogonal to both.
+
+## Sampling
+
+`MICROSTEP_FRAMES n` subdivides each frame's rotation into `n` sub-steps, spread
+symmetrically about the frame centre. This fills the gaps between frames when the
+oscillation is coarse, at `n` times the projection cost.
+
+`RECONSTRUCT_EVERY_NTH_FRAME n` uses only every `n`th frame — handy for a quick look
+at a large scan.
 
 ## Memory usage
-The three dimensional arrays containing the reconstructed reciprocal space are typically large (~10Gb). We appreciate that not all computers might have enough operating memory to hold this datasets. Thanks to the `hdf5`, it is possible to use large arrays hosted on hard drive. In such case, only a small portion of the array will be cached in the operating memory. In order to turn on caching set parameter `all_in_memory` to `False` and define the size of the memory for cache.
 
-    all_in_memory = False
+Reconstructed arrays are large. An 801³ grid needs about 4.1 GB while it is being
+built (2.06 GB of float32 data plus 2.06 GB of counts), so it fits in RAM on a 16 GB
+machine but not with much to spare.
 
-Such scheme is approximately three times slower, than holding all datasets in memory.
+Set `ALL_IN_MEMORY` to hold it all in RAM. Without it, the array lives on disk via
+hdf5 and only a cache is held in memory:
+
+```
+SIZE_OF_CACHE 500     # MB
+```
+
+Out-of-core is roughly three times slower, and is what you want for grids beyond
+about 900³.

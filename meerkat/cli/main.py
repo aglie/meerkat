@@ -28,7 +28,7 @@ def build_parser():
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    from . import info, reconstruct, transform_xparm
+    from . import dump_config, info, reconstruct, transform_xparm
 
     p = subparsers.add_parser(
         "reconstruct",
@@ -48,6 +48,15 @@ def build_parser():
     )
     transform_xparm.add_arguments(p)
     p.set_defaults(func=transform_xparm.run)
+
+    p = subparsers.add_parser(
+        "dump-config",
+        help="recover the config that made a reconstruction",
+        description="Print the .mrk that would reproduce a reconstruction, read back "
+        "from the provenance recorded inside it.",
+    )
+    dump_config.add_arguments(p)
+    p.set_defaults(func=dump_config.run)
 
     p = subparsers.add_parser(
         "info",
