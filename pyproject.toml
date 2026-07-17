@@ -98,6 +98,9 @@ ignore = [
 "meerkat/refine/*" = ["TID251"]
 "meerkat/legacy.py" = ["TID251"]
 "tests/*" = ["TID251"]
+# XPARM.XDS is a fixed-width column format. printf-style "%15.6f" maps onto it
+# directly and stays readable in a way f-string format specs do not.
+"tests/synthetic.py" = ["TID251", "UP031"]
 
 # --- Deferred legacy debt. Delete this block in Stage 4. -----------------------
 # meerkat/meerkat.py is the pre-modernization monolith. Every rule listed here is a
