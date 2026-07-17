@@ -155,6 +155,15 @@ def _reconstruct(params: ReconstructionParameters) -> None:
         keep_number_of_pixels=(params.output_format == "YELL_0.9"),
     )
 
+    # The legacy engine takes one `microsteps` triple [x, y, phi], where phi > 1
+    # subdivides each frame's rotation and phi < 1 (as 1/N) skips frames. The config
+    # splits those into two honest keywords; map them back. x/y sub-pixel
+    # microstepping is not implemented -- see the comment at meerkat.py's assert.
+    if params.microstep_frames is not None:
+        kwargs["microsteps"] = [1, 1, params.microstep_frames]
+    elif params.reconstruct_every_nth_frame is not None:
+        kwargs["microsteps"] = [1, 1, 1.0 / params.reconstruct_every_nth_frame]
+
     if params.unit_cell_transform is not None:
         kwargs["unit_cell_transform_matrix"] = np.asarray(
             params.unit_cell_transform, dtype=float

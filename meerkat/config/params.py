@@ -140,10 +140,16 @@ PARAMETER_SPEC: tuple[ParamSpec, ...] = (
         "out-of-core through HDF5",
     ),
     ParamSpec("size_of_cache", "SIZE_OF_CACHE", int, None, 100, "HDF5 chunk cache size in MB"),
-    # --- not implemented -----------------------------------------------------
+    # --- sampling ------------------------------------------------------------
     ParamSpec(
         "microstep_frames", "MICROSTEP_FRAMES", int, None, None,
-        "[not implemented] subdivide each frame's rotation into N microsteps",
+        "subdivide each frame's rotation into N sub-steps, spread symmetrically about "
+        "the frame centre. Fills the gaps between frames at coarse oscillation, at N "
+        "times the projection cost",
+    ),
+    ParamSpec(
+        "reconstruct_every_nth_frame", "RECONSTRUCT_EVERY_NTH_FRAME", int, None, None,
+        "use only every Nth frame. Handy for a quick preview of a large scan",
     ),
 )
 
@@ -332,6 +338,7 @@ class ReconstructionParameters:
     size_of_cache: int = _spec_default("size_of_cache")
 
     microstep_frames: int | None = _spec_default("microstep_frames")
+    reconstruct_every_nth_frame: int | None = _spec_default("reconstruct_every_nth_frame")
 
     def grid(self) -> Grid:
         return resolve_grid(
@@ -369,11 +376,26 @@ class ReconstructionParameters:
                 f"OUTPUT_FORMAT must be YELL_1.0 or YELL_0.9, got {self.output_format!r}"
             )
 
-        if self.microstep_frames is not None:
+        if self.microstep_frames is not None and self.microstep_frames < 1:
             raise ConfigError(
-                "MICROSTEP_FRAMES is not implemented. The microstepping code in "
-                "meerkat 0.3.x never ran (an assert blocked it, and its image loader "
-                "returned None), so it was removed rather than ported untested."
+                f"MICROSTEP_FRAMES must be at least 1, got {self.microstep_frames}. "
+                f"To use fewer frames rather than more sub-steps, use "
+                f"RECONSTRUCT_EVERY_NTH_FRAME."
+            )
+
+        if self.reconstruct_every_nth_frame is not None and self.reconstruct_every_nth_frame < 1:
+            raise ConfigError(
+                f"RECONSTRUCT_EVERY_NTH_FRAME must be at least 1, got "
+                f"{self.reconstruct_every_nth_frame}"
+            )
+
+        if self.microstep_frames is not None and self.reconstruct_every_nth_frame is not None:
+            # The legacy `microsteps` triple encodes both on one axis (phi > 1
+            # subdivides, phi < 1 decimates), so it cannot express both at once.
+            raise ConfigError(
+                "MICROSTEP_FRAMES and RECONSTRUCT_EVERY_NTH_FRAME cannot be combined: "
+                "the underlying engine represents them on the same axis. Subdividing "
+                "frames you then skip is unlikely to be what you meant anyway."
             )
 
         self.grid()  # raises if under-determined or inconsistent

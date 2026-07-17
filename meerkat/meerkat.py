@@ -308,19 +308,34 @@ def reconstruct_data(filename_template,
     incr_xy = np.array(microsteps)[0:2]
     assert np.all(np.mod(incr_xy, 1) == 0), 'microsteps in x and y direction should be integer'
 
-    #TODO: microstepping is omitted in this version
-    assert np.all(
-        incr_xy == np.array([1, 1])), 'microsteps are not implemented atm'  #see next section and also down there
-    if not np.all(incr_xy == np.array([1, 1])):
-        def get_image(fname):
-            np.kron(fabio.open(fname).data,
-                 np.ones(incr_xy))  # TODO: remove the copypaste from the previous definition of get_image
-        measured_pixels = 1 == np.kron(measured_pixels, np.ones(incr_xy))
+    # x/y (sub-pixel) microstepping is NOT implemented, and never has been: this assert
+    # has always blocked it, and the upsampling branch that used to sit here had no
+    # `return` in its get_image, so it could only ever have produced None.
+    #
+    # If it is ever wanted, this is where it lands. Each detector pixel is split into
+    # incr_xy[0] x incr_xy[1] sub-pixels, so:
+    #   * get_image would upsample:  np.kron(fabio.open(fname).data, np.ones(incr_xy))
+    #   * the mask would upsample too: measured_pixels = 1 == np.kron(measured_pixels, ...)
+    #   * and read_XPARM's detector geometry must follow (the block near the XPARM read
+    #     below sketches it): NX *= incr_xy[0], NY *= incr_xy[1],
+    #     pixelsize_x /= incr_xy[0], pixelsize_y /= incr_xy[1],
+    #     x_center *= incr_xy[0], y_center *= incr_xy[1].
+    # Note the cost before building it: np.kron multiplies the per-frame array by
+    # incr_x * incr_y, so 2x2 on a 6 Mpixel detector is a 4x memory and time hit on
+    # the hottest part of the loop.
+    assert np.all(incr_xy == np.array([1, 1])), 'microsteps in x and y are not implemented'
 
     microsteps = microsteps[2]
     if microsteps < 1:
-        image_increment = 1 / microsteps
-        assert (np.mod(image_increment, 1) == 0)
+        # Fractional phi means frame decimation, not microstepping: 0.1 -> every 10th
+        # frame. int() is load-bearing. 1/0.1 is a float, so np.arange below yielded a
+        # float array and `scale[frame_number - first_image]` raised IndexError -- this
+        # path could never run.
+        image_increment = int(round(1 / microsteps))
+        assert np.isclose(image_increment, 1 / microsteps), (
+            'fractional microsteps along phi must be 1/N for integer N, so that a whole '
+            'number of frames is skipped'
+        )
         microsteps = 1
     else:
         image_increment = 1

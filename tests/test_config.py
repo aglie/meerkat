@@ -230,8 +230,23 @@ class TestValidation:
         with pytest.raises(ConfigError, match="YELL"):
             self._base(output_format="Yell 1.0").validated()
 
-    def test_microstepping_is_refused_not_silently_ignored(self):
-        """It never worked in 0.3.x -- an assert blocked it and its image loader
-        returned None. Refuse loudly rather than pretend."""
-        with pytest.raises(ConfigError, match="not implemented"):
-            self._base(microstep_frames=2).validated()
+    def test_microstep_frames_is_accepted(self):
+        """phi microstepping works and is supported. Only x/y sub-pixel stepping is
+        unimplemented, and that is not reachable from the config at all."""
+        assert self._base(microstep_frames=4).validated() is not None
+
+    def test_microstep_frames_must_be_at_least_one(self):
+        with pytest.raises(ConfigError, match="at least 1"):
+            self._base(microstep_frames=0).validated()
+
+    def test_every_nth_frame_is_accepted(self):
+        assert self._base(reconstruct_every_nth_frame=10).validated() is not None
+
+    def test_every_nth_frame_must_be_at_least_one(self):
+        with pytest.raises(ConfigError, match="at least 1"):
+            self._base(reconstruct_every_nth_frame=0).validated()
+
+    def test_microstepping_and_decimation_cannot_be_combined(self):
+        """The legacy engine encodes both on the same axis of the microsteps triple."""
+        with pytest.raises(ConfigError, match="cannot be combined"):
+            self._base(microstep_frames=2, reconstruct_every_nth_frame=2).validated()
