@@ -12,12 +12,12 @@ which real-valued data does not do. Either is reasonable; the implementation kee
 np.around because it is already there and already handles negatives correctly.
 
 What IS tested here: the grid endpoints, rejection of out-of-range coordinates (where
-Meerkat2's C++ int() truncation gets it wrong), and the float32 cast of maxind that
-Stage 5 reverts.
+Meerkat2's C++ int() truncation gets it wrong), and that maxind stays float64.
 """
 
 import numpy as np
 import pytest
+from synthetic import build_experiment
 
 
 def to_index(c, maxind, number_of_pixels, dtype=np.float32):
@@ -66,12 +66,12 @@ class TestNegativeCoordinates:
 
 
 class TestFloat32MaxindRegression:
-    """Stage 5 territory: maxind is cast to float32 at meerkat.py:385.
+    """maxind must stay float64. It was float32 between 7c19787 and the restore.
 
     np.float_ (float64) was the original dtype; commit 7c19787 changed it to float32
-    while fixing numpy-2 aliases -- an unintentional precision regression.
+    while removing numpy-2 aliases -- an unintentional precision regression.
 
-    The blast radius is SMALLER than it first looks, and these tests record why, so
+    The blast radius was SMALLER than it first looks, and these tests record why, so
     nobody re-inflates the claim later. step_size_inv is computed as
         1.0 * (number_of_pixels - 1) / maxind / 2
     where number_of_pixels is an int64 array; numpy promotes int64/float32 to
@@ -82,9 +82,10 @@ class TestFloat32MaxindRegression:
     Consequence, measured over 500k random coordinates on an 801^3 grid:
       maxind = 7.0, 5.0, 1.5  (exactly representable) -> 0 voxels differ
       maxind = 7.3, 6.7, 0.1  (not representable)     -> ~0.001-0.002% differ
-    So the fix is still right -- it is a one-line revert of an accident, and
-    lower_limits is written to the output file where Yell and downstream tools read
-    it -- but it is a precision hygiene fix, not a correctness emergency.
+    So the fix was still right -- a one-line revert of an accident, and lower_limits
+    is written to the output where Yell and downstream tools read it -- but it was
+    precision hygiene, not a correctness emergency. It changed zero voxels of the
+    golden, whose maxind of 1.5 is exactly representable.
     """
 
     def test_step_size_inv_is_already_float64(self):
@@ -112,7 +113,7 @@ class TestFloat32MaxindRegression:
 
     @pytest.mark.parametrize("mv", [7.0, 5.0, 1.5])
     def test_representable_maxind_is_unaffected(self, mv):
-        """For the common case the float32 cast changes precisely nothing.
+        """For the common case the float32 cast changed precisely nothing.
 
         maxind is exactly representable, so both the offset and step_size_inv come
         out bit-identical -- even for coordinates sitting exactly on a boundary.
@@ -137,23 +138,59 @@ class TestFloat32MaxindRegression:
         fraction = (i32 != i64).any(axis=0).mean()
         assert fraction > 0.1, f"expected many boundary flips, got {fraction:.1%}"
 
-    def test_lower_limits_loses_precision(self):
-        """The always-present artifact: this value is written to the output file.
+    def test_float32_would_lose_precision_in_lower_limits(self):
+        """What the restore buys, and the reason it is worth a commit at all.
 
-        lower_limits = -maxind, and Yell reads it to place the grid in reciprocal
-        space. A float32 -7.3 is off by 1.9e-7 r.l.u.
+        lower_limits = -maxind is written to the output, and Yell reads it to place the
+        grid in reciprocal space. Under float32 a maxind of 7.3 was stored as
+        -7.3000001907, off by 1.9e-7 r.l.u. Exactly-representable values (7.0, 5.0,
+        1.5) were unaffected, which is why the regression went unnoticed for two years
+        and why restoring it changes zero voxels of the golden.
         """
         assert float(np.float32(-7.3)) != -7.3
         assert abs(float(np.float32(-7.3)) + 7.3) == pytest.approx(1.9e-7, rel=0.1)
+        assert float(np.float64(-7.3)) == -7.3
 
-    def test_current_code_uses_float32(self):
-        """Fails the moment Stage 5 lands, which is the point."""
+    def test_reconstruction_writes_lower_limits_exactly(self, tmp_path):
+        """End to end: a non-float32-representable limit survives to the output."""
+        import contextlib
+        import io
+        import warnings
+
+        from meerkat import reconstruct_data
+
+        xparm, template = build_experiment(tmp_path)
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            result = reconstruct_data(
+                filename_template=template,
+                first_image=1,
+                last_image=20,
+                maxind=[7.3, 7.3, 7.3],  # not exactly representable in float32
+                number_of_pixels=[11, 11, 11],
+                path_to_XPARM=str(xparm),
+                output_filename=None,
+                all_in_memory=True,
+            )
+        np.testing.assert_array_equal(
+            np.asarray(result["lower_limits"]),
+            np.array([-7.3, -7.3, -7.3]),
+            err_msg="lower_limits lost precision on the way to the output",
+        )
+
+    def test_maxind_uses_float64(self):
+        """Guards the restore -- float32 here was an accident once already.
+
+        Note this is about MAXIND only. The rebinned_data accumulator is float32 on
+        purpose and must stay that way: at 801^3 it is the difference between a 2.06 GB
+        and a 4.11 GB array, on a 16 GB machine.
+        """
         import inspect
 
         from meerkat.meerkat import reconstruct_data
 
         src = inspect.getsource(reconstruct_data)
-        assert "np.array(maxind, dtype=np.float32)" in src, (
-            "maxind dtype changed -- if this is Stage 5, invert this test and "
-            "regenerate the golden"
+        assert "np.array(maxind, dtype=np.float64)" in src
+        assert "np.array(maxind, dtype=np.float32)" not in src, (
+            "maxind is back to float32 -- see commit 7c19787, this is a regression"
         )

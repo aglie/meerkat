@@ -66,15 +66,14 @@ def test_grid_metadata_matches_golden(reconstruction):
     np.testing.assert_allclose(np.asarray(reconstruction["metric_tensor"]), g["metric_tensor"])
 
 
-def test_lower_limits_is_currently_float32(reconstruction):
-    """Pins the float32 regression so Stage 5 has to be a deliberate act.
+def test_lower_limits_is_float64(reconstruction):
+    """lower_limits is written to the output and Yell reads it to place the grid.
 
-    meerkat.py casts maxind to float32, and it leaks all the way into the output
-    metadata: lower_limits = -maxind. np.float_ (float64) was the original dtype
-    until commit 7c19787 swapped it for float32 while fixing numpy-2 aliases.
-    Stage 5 restores float64 and flips this assertion.
+    It was float32 between commit 7c19787 (which swapped np.float_ for np.float32
+    while removing numpy-2 aliases) and the restore. np.float_ WAS float64, so that
+    was an accident, not a decision.
     """
-    assert np.asarray(reconstruction["lower_limits"]).dtype == np.float32
+    assert np.asarray(reconstruction["lower_limits"]).dtype == np.float64
 
 
 def test_unmeasured_voxels_are_nan(reconstruction):

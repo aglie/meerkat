@@ -352,7 +352,11 @@ def reconstruct_data(filename_template,
     number_of_pixels = np.array(number_of_pixels)
     assert len(number_of_pixels) == 3
 
-    maxind = np.array(maxind, dtype=np.float32)
+    # float64, not float32. This was np.float_ (i.e. float64) until commit 7c19787
+    # swapped it for float32 while removing numpy-2 aliases -- a silent precision
+    # regression, not a decision. maxind is written straight to the output as
+    # lower_limits = -maxind, which Yell reads to place the grid in reciprocal space.
+    maxind = np.array(maxind, dtype=np.float64)
     assert len(maxind) == 3
 
     step_size_inv = 1.0 * (number_of_pixels - 1) / maxind / 2
