@@ -56,7 +56,7 @@ Homepage = "https://github.com/aglie/meerkat"
 Repository = "https://github.com/aglie/meerkat.git"
 
 [tool.setuptools]
-packages = ["meerkat"]
+packages = ["meerkat", "meerkat.xds"]
 
 [tool.setuptools.dynamic]
 version = { attr = "meerkat._version.__version__" }
@@ -101,6 +101,7 @@ ignore = [
 # XPARM.XDS is a fixed-width column format. printf-style "%15.6f" maps onto it
 # directly and stays readable in a way f-string format specs do not.
 "tests/synthetic.py" = ["TID251", "UP031"]
+"meerkat/xds/xparm.py" = ["UP031"]
 
 # --- Deferred legacy debt. Delete this block in Stage 4. -----------------------
 # meerkat/meerkat.py is the pre-modernization monolith. Every rule listed here is a

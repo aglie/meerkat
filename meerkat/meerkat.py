@@ -1,87 +1,40 @@
 import os
-import re
+import re  # noqa: F401  -- re-exported as meerkat.re by 0.3.x `from .meerkat import *`
 
 import fabio
 import h5py
 import numpy as np
 from numpy.linalg import norm
 
-from .det2lab_xds import det2lab_xds, rotvec2mat
+# Import from the real location, not through the deprecated meerkat.det2lab_xds
+# shim -- otherwise every `import meerkat.meerkat` fires that shim's
+# DeprecationWarning at users who did nothing wrong.
+from .xds.geometry import det2lab_xds, rotvec2mat
+from .xds.xparm import read_xparm
 
 
 def r_get_numbers(matchgroup, num):
-    """A helper function which can be used similarly to fscanf(fid,'%f',num) to extract num arguments from the regex iterator"""
-    res = []
-    for i in range(num):
-        res.append(float(next(matchgroup).group()))
-    return np.array(res)
+    """Deprecated. Extract `num` floats from a regex match iterator, fscanf-style.
+
+    Retained because `from meerkat import *` exported it in 0.3.x. XPARM parsing now
+    lives in meerkat.xds.xparm; nothing in meerkat calls this any more.
+    """
+    return np.array([float(next(matchgroup).group()) for _ in range(num)])
 
 
-def read_XPARM(path_to_XPARM='.'):
-    """Loads the instrumental geometry information from the XPARM.XDS or GXPARM.XDS files at the proposed location"""
+def read_XPARM(path_to_XPARM="."):
+    """Deprecated alias for meerkat.xds.xparm.read_xparm.
 
-    if not os.path.exists(path_to_XPARM):
-        raise Exception("path " + path_to_XPARM + "does not exist")
+    The implementation moved so that XPARM parsing -- a numpy-only text-file
+    operation -- no longer requires fabio and h5py to import. This name is the 0.3.x
+    spelling and is what improve_orientation, xparm_transform, the Ewald GUI and user
+    scripts call, so it stays.
 
-    if os.path.isdir(path_to_XPARM):
-        candidate = os.path.join(path_to_XPARM, 'GXPARM.XDS')
-        if os.path.isfile(candidate):
-            path_to_XPARM = candidate
-        else:
-            candidate = os.path.join(path_to_XPARM, 'XPARM.XDS')
-            if os.path.isfile(candidate):
-                path_to_XPARM = candidate
-            else:
-                raise Exception("files GXPARM.XDS and XPARM.XDS are not found in the folder " + path_to_XPARM)
-
-    with open(path_to_XPARM) as f:
-        f.readline()  # skip header
-        text = f.read()
-
-    # parse the rest to numbers
-    f = re.compile(r"-?\d+\.?\d*").finditer(text)
-
-    try:
-        result = dict(starting_frame=r_get_numbers(f, 1),
-                      starting_angle=r_get_numbers(f, 1),
-                      oscillation_angle=r_get_numbers(f, 1),
-                      rotation_axis=r_get_numbers(f, 3),
-
-                      wavelength=r_get_numbers(f, 1),
-                      wavevector=r_get_numbers(f, 3),
-
-                      space_group_nr=r_get_numbers(f, 1),
-                      cell=r_get_numbers(f, 6),
-                      unit_cell_vectors=np.reshape(r_get_numbers(f, 9), (3, 3)),
-
-                      number_of_detector_segments=r_get_numbers(f, 1),
-                      NX=r_get_numbers(f, 1),
-                      NY=r_get_numbers(f, 1),
-                      pixelsize_x=r_get_numbers(f, 1),
-                      pixelsize_y=r_get_numbers(f, 1),
-
-                      x_center=r_get_numbers(f, 1),
-                      y_center=r_get_numbers(f, 1),
-                      distance_to_detector=r_get_numbers(f, 1),
-
-                      detector_x=r_get_numbers(f, 3),
-                      detector_y=r_get_numbers(f, 3),
-                      detector_normal=r_get_numbers(f, 3),
-                      detector_segment_crossection=r_get_numbers(f, 5),
-                      detector_segment_geometry=r_get_numbers(f, 9))
-
-    except StopIteration:
-        raise Exception('Wrong format of the XPARM.XDS file')
-
-    # check there is nothing left
-    try:
-        next(f)
-    except StopIteration:
-        pass
-    else:
-        raise Exception('Wrong format of the XPARM.XDS file')
-
-    return result
+    Behaviour note: the errors are now FileNotFoundError/ValueError rather than bare
+    Exception. Both are Exception subclasses, so `except Exception` callers are
+    unaffected.
+    """
+    return read_xparm(path_to_XPARM)
 
 
 def cov2corr(inp):
