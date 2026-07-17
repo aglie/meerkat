@@ -41,6 +41,41 @@ def xparm(xparm_path):
 
 
 @pytest.fixture(scope="session")
+def refine_xparm_path():
+    """XPARM for the refinement fixture (Propeller dataset)."""
+    return DATA / "refine" / "XPARM.XDS"
+
+
+@pytest.fixture(scope="session")
+def refine_spot_path():
+    return DATA / "refine" / "SPOT.XDS"
+
+
+@pytest.fixture(scope="session")
+def refine_xparm(refine_xparm_path):
+    from meerkat.xds import read_xparm
+
+    return read_xparm(str(refine_xparm_path))
+
+
+@pytest.fixture(scope="session")
+def refine_spots(refine_spot_path):
+    """2695 real spots, already in the det2lab_xds convention.
+
+    A real refinement fixture is necessary rather than nice-to-have: the 22 Bragg
+    peaks used elsewhere all have h = 0, so a* is mathematically unconstrained by
+    them and refining the cell against them drives the a axis to length zero. These
+    spots span h = -6..6, k = -12..10, l = -12..12.
+
+    The XDS offset is applied here, before anything selects on hkl.
+    """
+    from meerkat.refine.orientation import XDS_SPOT_OFFSET
+    from meerkat.xds import read_spot_xds
+
+    return read_spot_xds(refine_spot_path)[:, :3] + XDS_SPOT_OFFSET
+
+
+@pytest.fixture(scope="session")
 def bragg_peaks():
     """XDS-indexed Bragg peaks: (hkl, pixel_xy, frame_number).
 
