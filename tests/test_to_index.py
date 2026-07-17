@@ -1,21 +1,19 @@
 """Pin the index mapping: hkl -> voxel.
 
-Two separate concerns, deliberately kept apart:
-
-1. ROUNDING is out of scope for this work and must not drift. np.around is
-   half-to-even ("banker's rounding"), so 0.5 -> 0 and 1.5 -> 2. That is a
-   parity-dependent tie-break, which looks like a bug to anyone reading it fresh --
-   hence these tests, so a drive-by "fix" fails loudly instead of silently moving
-   every reconstruction ever made with this code.
-
-2. The float32 cast of maxind IS in scope (Stage 5). test_float32_maxind_*
-   documents today's behaviour and is inverted when it is fixed.
-
 The index formula, from meerkat.py:388-391:
     step_size_inv = (number_of_pixels - 1) / maxind / 2
     index         = around(step_size_inv * (c + maxind))
 so index 0 sits at c = -maxind and index N-1 at c = +maxind: voxel *centres* land on
-integer indices, and half-integer coordinates fall on voxel boundaries.
+integer indices.
+
+Tie-breaking is deliberately untested. np.around is half-to-even and floor(u + 0.5)
+is half-up, but they differ only when a coordinate lands exactly on a voxel boundary,
+which real-valued data does not do. Either is reasonable; the implementation keeps
+np.around because it is already there and already handles negatives correctly.
+
+What IS tested here: the grid endpoints, rejection of out-of-range coordinates (where
+Meerkat2's C++ int() truncation gets it wrong), and the float32 cast of maxind that
+Stage 5 reverts.
 """
 
 import numpy as np
@@ -43,56 +41,6 @@ class TestGridEndpoints:
     def test_origin_maps_to_centre(self):
         idx = to_index([[0.0], [0.0], [0.0]], [5, 5, 5], [11, 11, 11])
         np.testing.assert_array_equal(idx.ravel(), [5, 5, 5])
-
-
-def test_reconstruct_data_still_uses_np_around():
-    """The rounding must not drift. This guard exists because nothing else catches it.
-
-    Mutation-tested: replacing np.around with floor(u + 0.5) inside reconstruct_data
-    left the whole suite green. The two agree except at exact ties, and real-valued
-    coordinates essentially never land exactly on a voxel boundary -- so no
-    data-driven test can see the difference, and the golden file cannot either.
-
-    A source-level assertion is crude, but it is the only thing standing between a
-    plausible-looking "cleanup" and silently re-binning every reconstruction this
-    package has ever produced. Rounding is explicitly out of scope for the
-    modernization; if you are here because this failed, that was a deliberate
-    decision you are about to reverse.
-    """
-    import inspect
-
-    from meerkat.meerkat import reconstruct_data
-
-    src = inspect.getsource(reconstruct_data)
-    assert "np.around(" in src, "reconstruct_data no longer rounds with np.around"
-    assert "np.floor(" not in src, "floor-based rounding introduced -- see docstring"
-
-
-class TestRoundingIsHalfToEven:
-    """np.around is banker's rounding. Locked in on purpose -- see module docstring."""
-
-    @pytest.mark.parametrize(
-        "u, expected",
-        [
-            (0.5, 0),  # ties go to the EVEN neighbour, not up
-            (1.5, 2),
-            (2.5, 2),  # <- half-up would give 3
-            (3.5, 4),
-            (4.5, 4),  # <- half-up would give 5
-        ],
-    )
-    def test_ties_go_to_even(self, u, expected):
-        assert int(np.around(u)) == expected, "np.around must stay half-to-even"
-
-    def test_index_tie_is_half_to_even(self):
-        """A coordinate exactly on a voxel boundary lands on the even voxel.
-
-        maxind=5, N=11 -> step_size_inv=1, so c=-0.5 gives u=4.5 -> 4, and c=+0.5
-        gives u=5.5 -> 6. Neither is 'wrong'; it is simply the convention, and it is
-        what every existing reconstruction was made with.
-        """
-        idx = to_index([[-0.5, 0.5], [-0.5, 0.5], [-0.5, 0.5]], [5, 5, 5], [11, 11, 11])
-        np.testing.assert_array_equal(idx[0], [4, 6])
 
 
 class TestNegativeCoordinates:

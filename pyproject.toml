@@ -51,12 +51,15 @@ cbf = ["cbf"]
 test = ["pytest>=7", "scipy>=1.7"]
 dev = ["pytest>=7", "scipy>=1.7", "ruff>=0.5"]
 
+[project.scripts]
+meerkat = "meerkat.cli.main:main"
+
 [project.urls]
 Homepage = "https://github.com/aglie/meerkat"
 Repository = "https://github.com/aglie/meerkat.git"
 
 [tool.setuptools]
-packages = ["meerkat", "meerkat.xds"]
+packages = ["meerkat", "meerkat.xds", "meerkat.config", "meerkat.cli", "meerkat.refine"]
 
 [tool.setuptools.dynamic]
 version = { attr = "meerkat._version.__version__" }
@@ -74,7 +77,9 @@ line-length = 100
 target-version = "py39"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "TID"]
+# TID251 only (banned-api, which enforces the meerkat.xds dependency boundary).
+# Not TID252: relative imports within a package are the house style here.
+select = ["E", "F", "W", "I", "UP", "B", "TID251"]
 ignore = [
     "E741",   # ambiguous name `l` -- it means Miller index l here, not the digit 1
     "B905",   # zip(strict=) is 3.10+, and we support 3.9
