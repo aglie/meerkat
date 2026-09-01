@@ -42,14 +42,30 @@ dependencies = [
     "fabio>=0.11",
 ]
 
+# Every optional dependency is optional because something real would break if it
+# were not: reconstruction must install on a headless cluster node, and
+# meerkat.xds must stay numpy-only so the viewer can depend on it without
+# circularity. Nothing here is optional merely to keep the list short.
 [project.optional-dependencies]
 # `refine` pulls scipy for improve-orientation. It is NOT a core dependency:
 # reconstruction does not need it, and meerkat.xds must stay numpy-only.
 refine = ["scipy>=1.7"]
 # `cbf` is only needed to apply XDS's X/Y-CORRECTIONS tables during refinement.
 cbf = ["cbf"]
+# `viewer` is the Ewald sphere GUI. By far the heaviest extra -- PyQt5 is a
+# ~60 MB wheel wrapping a C++ toolkit, and PyOpenGL needs a working GL driver --
+# and the only one that cannot be used at all over ssh without X forwarding. A
+# reconstruction on a compute node must not drag it in, so `meerkat view` is the
+# one subcommand that checks its own imports and says what to install.
+#
+# PyQt5, not PyQt6: meerkat.viewer.widgets is built on QGLWidget, which Qt6
+# removed. Floors are the versions the viewer has actually run against.
+viewer = ["PyQt5>=5.12", "PyOpenGL>=3.1"]
 test = ["pytest>=7", "scipy>=1.7"]
 dev = ["pytest>=7", "scipy>=1.7", "ruff>=0.5"]
+# Everything, for a workstation install. `dials` is deliberately absent: it is
+# not on PyPI in a usable form and comes from its own installer or conda.
+all = ["scipy>=1.7", "cbf", "PyQt5>=5.12", "PyOpenGL>=3.1"]
 
 [project.scripts]
 meerkat = "meerkat.cli.main:main"
@@ -58,8 +74,11 @@ meerkat = "meerkat.cli.main:main"
 Homepage = "https://github.com/aglie/meerkat"
 Repository = "https://github.com/aglie/meerkat.git"
 
-[tool.setuptools]
-packages = ["meerkat", "meerkat.xds", "meerkat.config", "meerkat.cli", "meerkat.refine"]
+# Discovery rather than an explicit list. The list had already fallen behind:
+# meerkat.io (provenance) was missing, so a pip install shipped a meerkat whose
+# reconstruct crashed on import, and meerkat.dials would have followed it.
+[tool.setuptools.packages.find]
+include = ["meerkat*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "meerkat._version.__version__" }
@@ -101,12 +120,17 @@ ignore = [
 "meerkat/cli/*" = ["TID251"]
 "meerkat/config/*" = ["TID251"]
 "meerkat/refine/*" = ["TID251"]
+"meerkat/viewer/*" = ["TID251"]
+"meerkat/dials/*" = ["TID251"]
 "meerkat/legacy.py" = ["TID251"]
 "tests/*" = ["TID251"]
 # XPARM.XDS is a fixed-width column format. printf-style "%15.6f" maps onto it
 # directly and stays readable in a way f-string format specs do not.
 "tests/synthetic.py" = ["TID251", "UP031"]
 "meerkat/xds/xparm.py" = ["UP031"]
+# XDS.INP is a line-per-keyword text format. Each f-string here is one output
+# line; wrapping them to fit 100 columns hides which keyword is being written.
+"meerkat/dials/to_xds.py" = ["E501"]
 
 # --- Deferred legacy debt. Delete this block in Stage 4. -----------------------
 # meerkat/meerkat.py is the pre-modernization monolith. Every rule listed here is a

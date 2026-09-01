@@ -48,9 +48,6 @@ REFINABLE = {
     "axis": 3,
 }
 
-# XDS reports spot positions with 1-based pixel indices and the frame number offset by
-# half an oscillation relative to what det2lab_xds expects.
-XDS_SPOT_OFFSET = np.array([-1.0, -1.0, 0.5])
 
 
 def dround(a):

@@ -28,7 +28,7 @@ def build_parser():
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    from . import dump_config, info, reconstruct, transform_xparm
+    from . import dials_to_xds, dump_config, info, reconstruct, transform_xparm, view
 
     p = subparsers.add_parser(
         "reconstruct",
@@ -64,6 +64,30 @@ def build_parser():
     )
     info.add_arguments(p)
     p.set_defaults(func=info.run)
+
+    p = subparsers.add_parser(
+        "dials-to-xds",
+        help="convert a DIALS experiment to XDS.INP/XPARM.XDS/SPOT.XDS",
+        description="Bug-free replacement for `dials.export format=xds`. Needs "
+        "dials and dxtbx (not required for any other meerkat command). See "
+        "meerkat.dials.to_xds for the bugs it works around.",
+    )
+    dials_to_xds.add_arguments(p)
+    p.set_defaults(func=dials_to_xds.run)
+
+    # Registered unconditionally, unlike improve-orientation below: PyQt5 and
+    # PyOpenGL are heavy enough that most installs will not have them, and a
+    # subcommand that silently does not exist is a worse answer to `meerkat view`
+    # than one that says what to install. view.run() does the explaining.
+    p = subparsers.add_parser(
+        "view",
+        help="open the Ewald sphere viewer (needs meerkat[viewer])",
+        description="Show the measured spots in reciprocal space, with the "
+        "instrument geometry live-editable. Needs PyQt5 and PyOpenGL, which are "
+        "not installed with meerkat: `pip install meerkat[viewer]`.",
+    )
+    view.add_arguments(p)
+    p.set_defaults(func=view.run)
 
     try:
         from . import improve_orientation

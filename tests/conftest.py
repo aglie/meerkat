@@ -69,8 +69,7 @@ def refine_spots(refine_spot_path):
 
     The XDS offset is applied here, before anything selects on hkl.
     """
-    from meerkat.refine.orientation import XDS_SPOT_OFFSET
-    from meerkat.xds import read_spot_xds
+    from meerkat.xds import XDS_SPOT_OFFSET, read_spot_xds
 
     return read_spot_xds(refine_spot_path)[:, :3] + XDS_SPOT_OFFSET
 

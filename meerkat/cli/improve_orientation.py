@@ -11,14 +11,13 @@ import numpy as np
 
 from ..refine.orientation import (
     REFINABLE,
-    XDS_SPOT_OFFSET,
     apply_xds_corrections,
     det2hkl,
     import_instrument_parameters,
     parse_cell_restraints,
     refine_orientation,
 )
-from ..xds import read_spot_xds, read_xparm, write_xparm
+from ..xds import XDS_SPOT_OFFSET, read_spot_xds, read_xparm, write_xparm
 
 __all__ = ["add_arguments", "run"]
 

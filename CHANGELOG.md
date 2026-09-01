@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`meerkat view`** -- the Ewald sphere viewer, absorbing `evaldpy/evald_qt5_v2d.py`.
+  Shows the spots XDS found as a point cloud in reciprocal space, with every
+  instrument parameter editable live; drag a rectangle to select spots and write them
+  back out in SPOT.XDS format. Needs `pip install meerkat[viewer]` (PyQt5 and
+  PyOpenGL), which nothing else does; the subcommand exists either way and says what
+  to install rather than silently not being there.
+- `meerkat.viewer.experiment` -- the viewer's geometry, numpy-only and therefore
+  testable in CI, which has no Qt and no display. `import meerkat.viewer` imports no
+  Qt; the window resolves on first access.
+- A folder given to the viewer is opened through `XPARM.XDS` in preference to
+  `XDS.INP`, which records neither the phi origin nor the orientation matrix. When
+  only XDS.INP is available the status bar says so.
+- `meerkat.xds.XDS_SPOT_OFFSET`, moved out of `meerkat.refine.orientation` so the
+  numpy-only layer owns the SPOT.XDS convention it documents.
+- `packaging/conda/meta.yaml` -- a conda-forge recipe, not yet submitted.
+
+### Fixed
+
+- **The viewer placed every spot a pixel and half a frame from where it belongs.** It
+  passed SPOT.XDS coordinates to `det2lab_xds` untouched -- the same bug fixed in
+  `improve-orientation` for 0.4.0. The two now agree spot for spot, which is the
+  point: the viewer is used to judge whether a geometry is good enough for the
+  refinement.
+- **Opening a dataset hid part of it.** The spot filter truncated its bounds to
+  integers, so a spot on frame 1399.5 fell outside a bound of 1399.
+- **Spots brighter than 2147483647 were discarded** -- the brightest ones. `QSpinBox`
+  is backed by a C++ int and silently clamps `setValue`, leaving the "max" bound below
+  the real maximum. An upper bound pinned at the spin box maximum is now read as "no
+  bound".
+- **Setting the spot list emitted an empty one first.** Each of the four bounds fired
+  its own refilter as it was set, and the first fired with the old bounds still in
+  place.
+- **Cancelling *Save selected* crashed the viewer** (a known bug in its own header),
+  as did dragging the rotation axis through zero. The former is a cancelled dialog,
+  the latter is reported in the status bar.
+- **Instrument parameters were rounded to two decimals on load** by `QDoubleSpinBox`'s
+  default, silently changing the geometry being displayed -- a detector direction
+  cosine of 0.999999 became 1.00.
+- A shader that failed to link produced a blank window and a cheerful empty log line;
+  the link status is now checked.
+- **The sdist shipped `tests/test_*.py` without `tests/conftest.py`, `tests/synthetic.py`
+  or `tests/data/`**, so `pytest` in an unpacked sdist failed at collection. setuptools'
+  default sweeps up files matching `test*.py` and nothing else; there is a `MANIFEST.in`
+  now. This matters for anyone packaging meerkat downstream -- conda-forge builds from
+  the sdist and runs the tests.
+- **`pip install meerkat` shipped no `meerkat.io`.** The explicit package list in
+  `pyproject.toml` had fallen behind, so an installed 0.4.0 raised `ModuleNotFoundError`
+  on `meerkat reconstruct`. Package discovery is automatic now, which also picks up
+  `meerkat.dials` and `meerkat.viewer`.
+
 ## 0.4.0
 
 The first release with a command line, a config file format, and provenance.

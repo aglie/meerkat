@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-__all__ = ["read_spot_xds"]
+__all__ = ["XDS_SPOT_OFFSET", "read_spot_xds"]
+
+# XDS reports spot positions with 1-based pixel indices and the frame number offset by
+# half an oscillation relative to what det2lab_xds expects. Add this to (x, y, frame)
+# to move a SPOT.XDS row into the det2lab_xds convention.
+XDS_SPOT_OFFSET = np.array([-1.0, -1.0, 0.5])
 
 
 def read_spot_xds(path):
@@ -17,7 +22,7 @@ def read_spot_xds(path):
 
     Pixel coordinates are 1-based and the frame number is offset by half an
     oscillation relative to the det2lab_xds convention -- callers wanting the
-    det2lab_xds convention must add [-1, -1, +0.5]. That correction is deliberately
+    det2lab_xds convention must add XDS_SPOT_OFFSET. That correction is deliberately
     NOT applied here: it is a convention shift the caller must opt into, and burying
     it in the reader is how it ends up applied twice or not at all.
     """

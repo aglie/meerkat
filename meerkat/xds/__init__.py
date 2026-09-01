@@ -10,7 +10,7 @@ meerkat.legacy.
 """
 
 from .geometry import det2lab_xds, rotvec2mat
-from .spot import read_spot_xds
+from .spot import XDS_SPOT_OFFSET, read_spot_xds
 from .xds_inp import params_from_xds_inp
 from .xparm import (
     CRYSTAL_KEYS,
@@ -23,6 +23,7 @@ from .xparm import (
 
 __all__ = [
     "CRYSTAL_KEYS",
+    "XDS_SPOT_OFFSET",
     "INSTRUMENT_KEYS",
     "cell2vecs",
     "det2lab_xds",
