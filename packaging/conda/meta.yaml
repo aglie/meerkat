@@ -16,7 +16,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  sha256: 4a311a3ac91528056aa3a95032c658dcdd48179476a555c569a0ea2108616f06
 
 build:
   # Pure python, so one noarch package serves every platform and python version.
