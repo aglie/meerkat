@@ -1,0 +1,12 @@
+# What the sdist carries beyond the package itself.
+#
+# setuptools' own default sweeps up files matching test*.py and nothing else, so
+# the 0.4.0 sdist shipped tests/test_*.py without tests/conftest.py, the fixture
+# data they read, or tests/synthetic.py -- `pytest` in an unpacked sdist failed
+# at collection. That is worth more than tidiness: conda-forge builds from the
+# sdist and runs the test suite, and so does anyone packaging this downstream.
+include LICENSE
+include CHANGELOG.md
+include README.md
+recursive-include tests *.py
+recursive-include tests/data *

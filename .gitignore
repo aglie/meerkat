@@ -13,3 +13,6 @@ venv/
 # reconstruction outputs
 *.h5
 !tests/data/*.h5
+
+# IDE
+.idea/
